@@ -31,13 +31,20 @@ TAIL_BYTES = 32 * 1024
 def extract_latest_turn(transcript_path: str) -> dict:
     """Read the tail of a JSONL transcript and extract the latest turn pair.
 
-    Returns {"user_prompt": str, "assistant_response": str, "turn_index": int}.
-    Returns empty strings on any failure.
+    Returns:
+        {
+          "user_prompt": str,
+          "assistant_response": str,
+          "turn_index": int,
+          "task_create_order": list[{"subject": str}],  # TaskCreate calls in response order
+        }
+    Returns empty strings / empty list on any failure.
     """
     try:
         path = Path(transcript_path)
         if not path.exists():
-            return {"user_prompt": "", "assistant_response": "", "turn_index": 0}
+            return {"user_prompt": "", "assistant_response": "", "turn_index": 0,
+                    "task_create_order": []}
 
         file_size = path.stat().st_size
         seek_pos = max(0, file_size - TAIL_BYTES)
@@ -66,6 +73,7 @@ def extract_latest_turn(transcript_path: str) -> dict:
         # Find the latest user prompt and assistant response
         user_prompt = ""
         assistant_response = ""
+        task_create_order = []
         turn_index = 0
 
         # Walk backwards to find the most recent assistant turn, then user turn before it
@@ -73,15 +81,25 @@ def extract_latest_turn(transcript_path: str) -> dict:
             entry = entries[i]
             entry_type = entry.get("type", "")
 
-            # Assistant message: extract text content
+            # Assistant message: extract text content and TaskCreate tool_use order
             if not assistant_response and entry_type == "assistant":
                 msg = entry.get("message", {})
                 content = msg.get("content", [])
                 if isinstance(content, list):
                     texts = []
                     for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
+                        if not isinstance(block, dict):
+                            continue
+                        block_type = block.get("type", "")
+                        if block_type == "text":
                             texts.append(block.get("text", ""))
+                        elif block_type == "tool_use" and block.get("name") == "TaskCreate":
+                            # Capture the subject in the order it appears in the response.
+                            # This is the authoritative creation order: Claude Code assigns
+                            # sequential integer IDs (1, 2, …) in this exact order.
+                            subject = (block.get("input", {}).get("subject") or "").strip()
+                            if subject:
+                                task_create_order.append({"subject": subject})
                     assistant_response = " ".join(texts)[:4000]
                 elif isinstance(content, str):
                     assistant_response = content[:4000]
@@ -108,10 +126,12 @@ def extract_latest_turn(transcript_path: str) -> dict:
             "user_prompt": user_prompt,
             "assistant_response": assistant_response,
             "turn_index": turn_index,
+            "task_create_order": task_create_order,
         }
 
     except Exception:
-        return {"user_prompt": "", "assistant_response": "", "turn_index": 0}
+        return {"user_prompt": "", "assistant_response": "", "turn_index": 0,
+                "task_create_order": []}
 
 
 def extract_token_cumulative(transcript_path: str) -> dict | None:

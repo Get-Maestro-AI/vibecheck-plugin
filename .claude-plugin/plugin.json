@@ -1,0 +1,11 @@
+{
+  "name": "vibecheck",
+  "version": "1.0.0",
+  "description": "Real-time session monitoring — pushes lifecycle events and enables semantic self-reporting for quality signal generation",
+  "author": { "name": "Maestro AI" },
+  "license": "MIT",
+  "commands": "./commands/",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./.mcp.json"
+}

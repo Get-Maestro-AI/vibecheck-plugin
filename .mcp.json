@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "vibecheck": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/../.venv/bin/python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/servers/vibecheck-mcp/server.py"
+      ],
+      "env": {
+        "VIBECHECK_API_URL": "http://localhost:8420"
+      }
+    }
+  }
+}
