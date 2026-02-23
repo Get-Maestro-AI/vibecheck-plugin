@@ -7,6 +7,8 @@ You will perform a focused pre-commit code review of staged changes and report f
 
 **Your job is NOT general feedback. Your job is: find real problems that should be fixed before this commit.**
 
+> **IMPORTANT: Do not make any code changes during this review.** Your only action is to analyze the diff, POST findings to VibeCheck, and present results to the user. Fixes happen separately, after the user decides which issues to address.
+
 ---
 
 ## Staged changes
@@ -45,7 +47,7 @@ If no meaningful issues exist, the review should be clean (ready_to_commit: true
 3. Identify test gaps only where a specific uncovered scenario is risky.
 4. Decide: is this safe to commit as-is?
 5. Submit your findings to VibeCheck using the exact curl command below.
-6. Show the user a clean summary of what you found.
+6. Parse the response and present a summary to the user (see "After submitting" below).
 
 **Constructing the curl payload:**
 Build the JSON payload with your actual findings, then run this curl command:
@@ -64,7 +66,6 @@ The JSON payload structure:
   "staged_files": ["<from staged files list above>"],
   "blocking_issues": [
     {
-      "id": "B1",
       "title": "<short title, max 80 chars>",
       "category": "<from the review criteria list>",
       "severity": "High",
@@ -85,21 +86,30 @@ The JSON payload structure:
 }
 ```
 
+Note: do not include an `id` field in blocking issues — the server assigns IDs automatically.
+
 If there are no blocking issues: `"blocking_issues": [], "ready_to_commit": true`
 If there are no test gaps: `"test_gaps": []`
 
-If VibeCheck is not running, the curl will fail silently — that's fine, still show the user your findings.
+---
 
-Re-run `/vibecheck:review` after fixing blocking issues to get a fresh assessment.
+## After submitting
 
-## After fixing a blocking issue
+Parse the JSON response from the curl command. The response includes an `issues` array with server-assigned IDs, titles, and severities.
 
-Once you have fixed a specific blocking issue (e.g. B1), call `vibecheck_dismiss_issue`
-to remove it from the dashboard immediately — no need to re-run the full review:
+**If VibeCheck is reachable and issues were found**, present a summary like this:
 
 ```
-vibecheck_dismiss_issue(issue_id="B1", resolution_note="<one-line description of the fix>")
+VibeCheck found 2 blocking issue(s):
+  [B1] Missing null check in handleUserInput (High) — src/handler.py:42
+  [B2] SQL query vulnerable to injection (High) — src/db.py:87
+
+These have been logged to the VibeCheck dashboard.
+Would you like me to fix any of these?
 ```
 
-Call it once per issue as you resolve each one. When all blocking issues are fixed,
-re-run `/vibecheck:review` to confirm readiness and get a clean pass.
+Then wait for the user's response. If the user says yes (for all or specific issues), use `/vibecheck:fix <ID>` for each one.
+
+**If VibeCheck is unreachable**, still show the user your findings in the same format, but note that they were not saved to the dashboard.
+
+**If no blocking issues were found**, tell the user the staged changes look clean and are ready to commit.

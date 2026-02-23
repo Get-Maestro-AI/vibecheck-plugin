@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 from urllib import request as urllib_request
 from urllib.error import URLError
@@ -54,8 +55,8 @@ except ImportError:
             return
 
 
-def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> None:
-    """POST a dismiss-issue request to the VibeCheck server (fire and forget)."""
+def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> dict:
+    """POST a dismiss-issue request and return server result."""
     try:
         api_url = get_api_url()
         creds = resolve_credentials()
@@ -74,10 +75,17 @@ def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib_request.urlopen(req, timeout=5):
-            pass
+        with urllib_request.urlopen(req, timeout=5) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            if body:
+                try:
+                    return json.loads(body)
+                except Exception:
+                    return {"ok": True}
+            return {"ok": True}
     except (URLError, OSError, Exception) as e:
         log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/dismiss-issue", e)
+        return {"ok": False, "dismissed": 0}
 
 
 def post_mcp_report(report_data: dict) -> None:
@@ -109,6 +117,7 @@ def _get_session_context() -> tuple[str, str]:
 # ── MCP Server definition ─────────────────────────────────────────────────────
 
 app = Server("vibecheck")
+_EVENT_SEQ = 0
 
 
 @app.list_tools()
@@ -267,22 +276,33 @@ async def list_tools() -> list[types.Tool]:
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
+    global _EVENT_SEQ
     session_id, cwd = _get_session_context()
 
     # vibecheck_dismiss_issue uses a dedicated endpoint, not the MCPReport path
     if name == "vibecheck_dismiss_issue":
         issue_id = arguments.get("issue_id", "")
         resolution_note = arguments.get("resolution_note", "")
-        post_dismiss_issue(issue_id, resolution_note)
+        result = post_dismiss_issue(issue_id, resolution_note)
+        dismissed = int(result.get("dismissed", 0) or 0) if isinstance(result, dict) else 0
         note = f" ({resolution_note})" if resolution_note else ""
-        return [types.TextContent(type="text", text=f"Issue {issue_id} dismissed from VibeCheck{note}.")]
+        if dismissed > 0:
+            text = f"Issue {issue_id} dismissed from VibeCheck{note}."
+        else:
+            text = (
+                f"Issue {issue_id} was not dismissed (no matching active issue found){note}."
+            )
+        return [types.TextContent(type="text", text=text)]
 
     report: dict = {
         "session_id": session_id,
         "cwd": cwd,
+        "event_uuid": str(uuid.uuid4()),
+        "event_seq": _EVENT_SEQ + 1,
         "report_type": _tool_to_report_type(name),
         **arguments,
     }
+    _EVENT_SEQ += 1
 
     post_mcp_report(report)
 

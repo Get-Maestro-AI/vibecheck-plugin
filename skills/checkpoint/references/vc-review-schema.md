@@ -9,7 +9,6 @@ POST to `http://localhost:8420/api/push/vc-review`.
   "staged_files": ["<file1>", "<file2>"],
   "blocking_issues": [
     {
-      "id": "B1",
       "title": "<short title, max 80 chars>",
       "category": "<one of the review criteria below>",
       "severity": "High",
@@ -39,6 +38,27 @@ POST to `http://localhost:8420/api/push/vc-review`.
 - `ready_to_commit`: `true` only when `blocking_issues` is empty
 - If no blocking issues: `"blocking_issues": [], "ready_to_commit": true`
 - If no test gaps: `"test_gaps": []`
+- Do NOT include an `id` field in blocking issues — the server assigns B1, B2, ... labels automatically based on position
+
+## Server response
+
+The server returns a JSON object including an `issues` array with the server-assigned labels:
+
+```json
+{
+  "ok": true,
+  "blocking_issues": 2,
+  "test_gaps": 0,
+  "ready_to_commit": false,
+  "alerts_created": 3,
+  "issues": [
+    {"id": "B1", "title": "Missing null check in handleUserInput", "severity": "High", "location": "src/handler.py:42"},
+    {"id": "B2", "title": "SQL query vulnerable to injection", "severity": "High", "location": "src/db.py:87"}
+  ]
+}
+```
+
+Use the `issues` array to present findings to the user and ask if they want specific issues fixed.
 
 ## Valid `category` values
 

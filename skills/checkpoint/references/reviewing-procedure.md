@@ -41,7 +41,7 @@ Pass the subagent:
 - **Task goal**: your checkpoint summary (what you just built and why)
 - **Files to review**: the scoped list from Steps 1–2
 - **Diff**: the full output of the `git diff HEAD` from Step 3, embedded inline in the prompt
-- **Instructions**: Review only the provided diff for correctness bugs, fragile assumptions, unhandled edge cases, error handling gaps, security risks, concurrency issues, performance risks, breaking API changes, and missing validation. POST findings to `http://localhost:8420/api/push/vc-review` with `staged_files` set to the scoped file list. Call `vibecheck_dismiss_issue` for any issues you resolve inline. Use the payload schema in `references/vc-review-schema.md`.
+- **Instructions**: Review only the provided diff for correctness bugs, fragile assumptions, unhandled edge cases, error handling gaps, security risks, concurrency issues, performance risks, breaking API changes, and missing validation. POST findings to `http://localhost:8420/api/push/vc-review` with `staged_files` set to the scoped file list. Do NOT make code changes or dismiss issues — your only job is to analyze and report. Use the payload schema in `references/vc-review-schema.md`.
 
 **The subagent reviews only the diff you provide — it does NOT run git commands itself.**
 
