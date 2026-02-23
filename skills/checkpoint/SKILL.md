@@ -12,8 +12,12 @@ allowed-tools: Read
 ## Non-negotiable rules
 
 - ALWAYS include `files_modified` in every `vibecheck_report_progress` call
-- ALWAYS call `vibecheck_checkpoint` with `status_label: "reviewing"` before committing staged changes
-- The session is NOT COMPLETE until `vibecheck_checkpoint` with `status_label: "done"` has been called
+- ALWAYS call `vibecheck_checkpoint` with `status_label: "reviewing"` before final completion
+- Completion is a hard precondition, not optional:
+  - DO NOT treat an objective as done until completion protocol succeeds
+  - Preferred path: run `/vibecheck:complete` (single command)
+  - Fallback path: `vibecheck_begin_completion` -> `/vibecheck:review` -> `vibecheck_finalize_objective`
+- If completion is blocked, resolve the blocker and retry (with explicit `objective_id` when available)
 
 ---
 
@@ -23,7 +27,9 @@ allowed-tools: Read
 
 - After planning is complete, before implementation starts: `status_label: "implementing"`
 - After implementation is complete, before testing/review: `status_label: "reviewing"`
-- When you have finished all work: `status_label: "done"`
+- When you have finished all work:
+  1) run `/vibecheck:complete`
+  2) only after success, call `status_label: "done"`
 - When you discover you need to debug something unexpected: `status_label: "debugging"`
 
 **When transitioning to `"reviewing"`: launch a targeted background code review subagent.**
@@ -35,6 +41,22 @@ See [references/reviewing-procedure.md](references/reviewing-procedure.md) for t
 - After completing a non-trivial function, component, or module
 - After all tests pass for a specific feature
 - After resolving a specific bug
+
+### `vibecheck_begin_completion` — call when objective is ready for final review
+
+- Use after implementation/testing is done and before `/vibecheck:review`
+- If blocked with "No active objective", retry with explicit `objective_id` from the dashboard/UI context
+
+### `vibecheck_finalize_objective` — call after review payload is submitted
+
+- If blocked with `protocol_status=pending_protocol`, run `/vibecheck:review` first
+- Treat blocked finalize as actionable state, not an error
+
+### `/vibecheck:complete` — preferred completion path
+
+- Use this as the default completion workflow
+- It runs begin -> review payload -> finalize in one flow
+- If blocked, surface the blocker and retry with explicit `objective_id`
 
 **`files_modified` is required, not optional.** List every file you edited in this subtask. This list scopes automated reviews — underreporting means issues get missed. Include files modified via Bash (e.g., `sed` rewrites) that don't appear as Edit/Write tool calls.
 

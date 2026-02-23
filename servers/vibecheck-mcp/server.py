@@ -88,6 +88,62 @@ def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> dict:
         return {"ok": False, "dismissed": 0}
 
 
+def post_begin_completion(objective_id: str = "", trigger: str = "manual") -> dict:
+    """POST begin-completion handshake request and return server payload."""
+    try:
+        api_url = get_api_url()
+        creds = resolve_credentials()
+        session_id, cwd = _get_session_context()
+        payload = {
+            "session_id": session_id,
+            "cwd": cwd,
+            "objective_id": objective_id,
+            "trigger": trigger,
+            **creds,
+        }
+        data = json.dumps(payload, default=str).encode()
+        req = urllib_request.Request(
+            f"{api_url}/api/push/begin-completion",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=8) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return json.loads(body) if body else {"ok": True}
+    except (URLError, OSError, Exception) as e:
+        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/begin-completion", e)
+        return {"ok": False, "blocked": True, "reason": "begin-completion request failed"}
+
+
+def post_finalize_objective(objective_id: str = "", checkpoint_summary: str = "") -> dict:
+    """POST finalize-objective request and return server payload."""
+    try:
+        api_url = get_api_url()
+        creds = resolve_credentials()
+        session_id, cwd = _get_session_context()
+        payload = {
+            "session_id": session_id,
+            "cwd": cwd,
+            "objective_id": objective_id,
+            "checkpoint_summary": checkpoint_summary,
+            **creds,
+        }
+        data = json.dumps(payload, default=str).encode()
+        req = urllib_request.Request(
+            f"{api_url}/api/push/finalize-objective",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=8) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return json.loads(body) if body else {"ok": True}
+    except (URLError, OSError, Exception) as e:
+        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/finalize-objective", e)
+        return {"ok": False, "blocked": True, "reason": "finalize-objective request failed"}
+
+
 def post_mcp_report(report_data: dict) -> None:
     """POST an MCPReport to the VibeCheck server (fire and forget)."""
     try:
@@ -271,6 +327,48 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["issue_id"],
             },
         ),
+        types.Tool(
+            name="vibecheck_begin_completion",
+            description=(
+                "Begin objective completion protocol. Call this when work is ready "
+                "for final review. Returns the scoped files list and marks the "
+                "objective as pending protocol completion."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "objective_id": {
+                        "type": "string",
+                        "description": "Optional explicit objective id override",
+                    },
+                    "trigger": {
+                        "type": "string",
+                        "enum": ["manual", "checkpoint_done", "session_end"],
+                        "description": "Why completion protocol is starting",
+                    },
+                },
+            },
+        ),
+        types.Tool(
+            name="vibecheck_finalize_objective",
+            description=(
+                "Finalize objective after completion protocol is complete. "
+                "This is blocked until a review payload has been submitted."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "objective_id": {
+                        "type": "string",
+                        "description": "Optional explicit objective id override",
+                    },
+                    "checkpoint_summary": {
+                        "type": "string",
+                        "description": "Optional short completion summary",
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -294,6 +392,37 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             )
         return [types.TextContent(type="text", text=text)]
 
+    if name == "vibecheck_begin_completion":
+        result = post_begin_completion(
+            objective_id=arguments.get("objective_id", ""),
+            trigger=arguments.get("trigger", "manual"),
+        )
+        if result.get("ok"):
+            files = result.get("files_to_review") or []
+            return [types.TextContent(
+                type="text",
+                text=(
+                    f"Completion protocol started for {result.get('objective_id', '')}. "
+                    f"{len(files)} file(s) scoped for review."
+                ),
+            )]
+        return [types.TextContent(type="text", text=f"Begin completion blocked: {result.get('reason', 'unknown error')}")]
+
+    if name == "vibecheck_finalize_objective":
+        result = post_finalize_objective(
+            objective_id=arguments.get("objective_id", ""),
+            checkpoint_summary=arguments.get("checkpoint_summary", ""),
+        )
+        if result.get("ok"):
+            return [types.TextContent(type="text", text=f"Objective finalized: {result.get('objective_id', '')}")]
+        return [types.TextContent(
+            type="text",
+            text=(
+                f"Finalize blocked: {result.get('reason', 'unknown error')} "
+                f"(protocol_status={result.get('protocol_status', 'unknown')})"
+            ),
+        )]
+
     report: dict = {
         "session_id": session_id,
         "cwd": cwd,
@@ -306,6 +435,29 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     post_mcp_report(report)
 
+    # Enforce completion handshake on done checkpoint: attempt finalize and
+    # return a blocked message when protocol review has not completed yet.
+    if name == "vibecheck_checkpoint" and arguments.get("status_label") == "done":
+        result = post_finalize_objective(
+            objective_id=arguments.get("objective_id", ""),
+            checkpoint_summary=arguments.get("summary", ""),
+        )
+        if result.get("ok"):
+            return [types.TextContent(
+                type="text",
+                text=(
+                    f"Done checkpoint accepted; objective finalized "
+                    f"({result.get('objective_id', '')})."
+                ),
+            )]
+        return [types.TextContent(
+            type="text",
+            text=(
+                "Done checkpoint blocked until completion protocol finishes. "
+                f"{result.get('next_action', result.get('reason', 'Run review then finalize.'))}"
+            ),
+        )]
+
     # Return a brief acknowledgment (not shown to user unless debug mode)
     ack_messages = {
         "vibecheck_report_progress": f"Progress reported: {arguments.get('current_task', '')}",
@@ -313,6 +465,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         "vibecheck_request_guidance": f"Guidance requested: {arguments.get('question', '')}",
         "vibecheck_checkpoint": f"Checkpoint: {arguments.get('status_label', '')} — {arguments.get('summary', '')}",
         "vibecheck_dismiss_issue": f"Issue {arguments.get('issue_id', '')} dismissed.",
+        "vibecheck_begin_completion": "Completion protocol started.",
+        "vibecheck_finalize_objective": "Objective finalize requested.",
     }
     msg = ack_messages.get(name, "Reported to VibeCheck.")
     return [types.TextContent(type="text", text=msg)]

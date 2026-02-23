@@ -101,14 +101,14 @@ Parse the JSON response from the curl command. The response includes an `issues`
 
 ```
 VibeCheck found 2 blocking issue(s):
-  [B1] Missing null check in handleUserInput (High) — src/handler.py:42
-  [B2] SQL query vulnerable to injection (High) — src/db.py:87
+  [401] Missing null check in handleUserInput (High) — src/handler.py:42
+  [402] SQL query vulnerable to injection (High) — src/db.py:87
 
 These have been logged to the VibeCheck dashboard.
 Would you like me to fix any of these?
 ```
 
-Then wait for the user's response. If the user says yes (for all or specific issues), use `/vibecheck:fix <ID>` for each one.
+Then wait for the user's response. If the user says yes (for all or specific issues), use `/vibecheck:fix <ID>` for each one (ID is the internal VibeCheck alert ID).
 
 **If VibeCheck is unreachable**, still show the user your findings in the same format, but note that they were not saved to the dashboard.
 
