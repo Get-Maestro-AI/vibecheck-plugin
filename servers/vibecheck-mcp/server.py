@@ -38,11 +38,20 @@ sys.path.insert(0, _SCRIPTS_DIR)
 try:
     from lib.config import get_api_url  # type: ignore[import]
     from lib.auth import resolve_credentials  # type: ignore[import]
+    from lib.hook_log import log_hook_issue  # type: ignore[import]
 except ImportError:
     def get_api_url() -> str:
         return os.environ.get("VIBECHECK_API_URL", "http://localhost:8420")
     def resolve_credentials() -> dict:
         return {}
+    def log_hook_issue(script: str, message: str, exc: Exception | None = None) -> None:
+        try:
+            note = f"[{script}] {message}"
+            if exc:
+                note += f" | {type(exc).__name__}: {exc}"
+            print(note, file=sys.stderr)
+        except Exception:
+            return
 
 
 def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> None:
@@ -67,8 +76,8 @@ def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> None:
         )
         with urllib_request.urlopen(req, timeout=5):
             pass
-    except (URLError, OSError, Exception):
-        pass  # Never fail the tool call if the server is unreachable
+    except (URLError, OSError, Exception) as e:
+        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/dismiss-issue", e)
 
 
 def post_mcp_report(report_data: dict) -> None:
@@ -86,8 +95,8 @@ def post_mcp_report(report_data: dict) -> None:
         )
         with urllib_request.urlopen(req, timeout=5):
             pass
-    except (URLError, OSError, Exception):
-        pass  # Never fail the tool call if the server is unreachable
+    except (URLError, OSError, Exception) as e:
+        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/mcp-report", e)
 
 
 def _get_session_context() -> tuple[str, str]:

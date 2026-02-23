@@ -15,14 +15,16 @@ import json
 import os
 import subprocess
 import sys
+import hashlib
 from pathlib import Path
 from urllib import request as urllib_request
-from urllib.error import URLError
+from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.auth import resolve_credentials  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
+from lib.hook_log import log_hook_issue  # type: ignore[import]
 
 MAX_TODOS = 30
 MAX_FIXMES = 30
@@ -30,11 +32,22 @@ GREP_TIMEOUT = 8
 BUILD_TIMEOUT = 20
 
 
+def _build_event_id(hook_data: dict) -> str:
+    stable = {
+        k: v for k, v in hook_data.items()
+        if k not in {"event_id", "event_seq", "event_source", "plugin_version"}
+    }
+    blob = json.dumps(stable, sort_keys=True, default=str)
+    return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
+
+
 def push_inspection(hook_data: dict, creds: dict, inspection: dict) -> None:
     """POST inspection results to the server (fire and forget)."""
     payload = {
         **hook_data,
         **creds,
+        "event_id": _build_event_id(hook_data),
+        "event_source": "post_session_inspect",
         "inspection_results": inspection,
         "plugin_version": "1.0.0",
     }
@@ -49,8 +62,22 @@ def push_inspection(hook_data: dict, creds: dict, inspection: dict) -> None:
         )
         with urllib_request.urlopen(req, timeout=5):
             pass
-    except Exception:
-        pass
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:800]
+        except Exception:
+            body = ""
+        log_hook_issue(
+            "post_session_inspect",
+            (
+                "Failed to POST /api/push/hook-event "
+                f"(status={e.code}, response={body})"
+            ),
+            e,
+        )
+    except Exception as e:
+        log_hook_issue("post_session_inspect", "Failed to POST /api/push/hook-event", e)
 
 
 def grep_pattern(pattern: str, cwd: str, max_results: int) -> list[dict]:
@@ -77,6 +104,7 @@ def grep_pattern(pattern: str, cwd: str, max_results: int) -> list[dict]:
                     "text": parts[2].strip()[:200],
                 })
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        log_hook_issue("post_session_inspect", f"grep_pattern failed for {pattern}")
         pass
     return results
 
@@ -107,7 +135,7 @@ def count_uncommitted(cwd: str) -> int:
             ["git", "status", "--short"],
             cwd=cwd, capture_output=True, text=True, timeout=5
         )
-        return len([l for l in result.stdout.splitlines() if l.strip()])
+        return len([line for line in result.stdout.splitlines() if line.strip()])
     except Exception:
         return 0
 
@@ -115,18 +143,20 @@ def count_uncommitted(cwd: str) -> int:
 def main() -> None:
     try:
         hook_data = json.load(sys.stdin)
-    except Exception:
+    except Exception as e:
+        log_hook_issue("post_session_inspect", "Failed to parse hook payload JSON", e)
         sys.exit(0)
 
     cwd = hook_data.get("cwd", "")
     if not cwd or not os.path.isdir(cwd):
+        log_hook_issue("post_session_inspect", "Missing cwd or cwd is not a directory")
         sys.exit(0)
 
     creds = {}
     try:
         creds = resolve_credentials()
-    except Exception:
-        pass
+    except Exception as e:
+        log_hook_issue("post_session_inspect", "Failed to resolve credentials", e)
 
     # Phase 1: TODOs and FIXMEs (fast grep — POST immediately)
     todos = grep_pattern("TODO", cwd, MAX_TODOS)
@@ -166,9 +196,10 @@ def main() -> None:
         except subprocess.TimeoutExpired:
             inspection["build_status"] = "error"
             inspection["build_output"] = "Build command timed out"
+            log_hook_issue("post_session_inspect", "Build command timed out")
             push_inspection(hook_data, creds, inspection)
-        except Exception:
-            pass
+        except Exception as e:
+            log_hook_issue("post_session_inspect", "Build command failed", e)
 
 
 if __name__ == "__main__":

@@ -11,14 +11,25 @@ import json
 import os
 import subprocess
 import sys
+import hashlib
 from pathlib import Path
 from urllib import request as urllib_request
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.auth import resolve_credentials  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
+from lib.hook_log import log_hook_issue  # type: ignore[import]
+
+
+def _build_event_id(hook_data: dict) -> str:
+    stable = {
+        k: v for k, v in hook_data.items()
+        if k not in {"event_id", "event_seq", "event_source", "plugin_version"}
+    }
+    blob = json.dumps(stable, sort_keys=True, default=str)
+    return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def run(cmd: list[str], cwd: str, timeout: int = 5) -> str:
@@ -35,13 +46,14 @@ def run(cmd: list[str], cwd: str, timeout: int = 5) -> str:
 def main() -> None:
     try:
         hook_data = json.load(sys.stdin)
-    except Exception:
+    except Exception as e:
+        log_hook_issue("session_baseline", "Failed to parse hook payload JSON", e)
         sys.exit(0)
 
     cwd = hook_data.get("cwd", "")
-    session_id = hook_data.get("session_id", "")
 
     if not cwd or not os.path.isdir(cwd):
+        log_hook_issue("session_baseline", "Missing cwd or cwd is not a directory")
         sys.exit(0)
 
     # Collect git context
@@ -51,7 +63,7 @@ def main() -> None:
     git_remote = run(["git", "remote", "get-url", "origin"], cwd)
 
     # Uncommitted file count
-    total_uncommitted = len([l for l in git_status.splitlines() if l.strip()])
+    total_uncommitted = len([line for line in git_status.splitlines() if line.strip()])
 
     # Top-level directory listing (bounded)
     try:
@@ -97,12 +109,14 @@ def main() -> None:
     creds = {}
     try:
         creds = resolve_credentials()
-    except Exception:
-        pass
+    except Exception as e:
+        log_hook_issue("session_baseline", "Failed to resolve credentials", e)
 
     payload = {
         **hook_data,
         **creds,
+        "event_id": _build_event_id(hook_data),
+        "event_source": "session_baseline",
         "session_baseline": session_baseline,
         "plugin_version": "1.0.0",
     }
@@ -118,8 +132,22 @@ def main() -> None:
         )
         with urllib_request.urlopen(req, timeout=10):
             pass
-    except (URLError, OSError, Exception):
-        pass
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:800]
+        except Exception:
+            body = ""
+        log_hook_issue(
+            "session_baseline",
+            (
+                "Failed to POST /api/push/hook-event "
+                f"(status={e.code}, response={body})"
+            ),
+            e,
+        )
+    except (URLError, OSError, Exception) as e:
+        log_hook_issue("session_baseline", "Failed to POST /api/push/hook-event", e)
 
 
 if __name__ == "__main__":

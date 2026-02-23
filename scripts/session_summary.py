@@ -15,18 +15,29 @@ import json
 import os
 import sys
 import signal
+import hashlib
 from pathlib import Path
 from urllib import request as urllib_request
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.auth import resolve_credentials  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
+from lib.hook_log import log_hook_issue  # type: ignore[import]
 from lib.transcript import parse_transcript  # type: ignore[import]
 
 # Internal parse timeout: if transcript parse exceeds this, send what we have
 PARSE_TIMEOUT_S = 10
+
+
+def _build_event_id(hook_data: dict) -> str:
+    stable = {
+        k: v for k, v in hook_data.items()
+        if k not in {"event_id", "event_seq", "event_source", "plugin_version"}
+    }
+    blob = json.dumps(stable, sort_keys=True, default=str)
+    return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def with_timeout(fn, timeout_s: int, fallback):
@@ -51,11 +62,13 @@ def with_timeout(fn, timeout_s: int, fallback):
 def main() -> None:
     try:
         hook_data = json.load(sys.stdin)
-    except Exception:
+    except Exception as e:
+        log_hook_issue("session_summary", "Failed to parse hook payload JSON", e)
         sys.exit(0)
 
     transcript_path = hook_data.get("transcript_path", "")
     if not transcript_path or not os.path.exists(transcript_path):
+        log_hook_issue("session_summary", "Missing transcript_path or file not found")
         sys.exit(0)
 
     # Parse with internal timeout
@@ -64,6 +77,8 @@ def main() -> None:
         "tool_call_counts": {}, "token_usage": {}, "model": "",
         "objectives_raw": [], "conversation_window": [],
         "files_modified": [], "error_count": 0, "consecutive_errors": 0,
+        "user_entries_total": 0, "user_prompt_entries": 0, "user_tool_result_entries": 0,
+        "parse_degraded": True, "parse_degraded_reason": "parse_timeout",
     }
 
     session_summary = with_timeout(
@@ -71,16 +86,23 @@ def main() -> None:
         PARSE_TIMEOUT_S,
         fallback_payload,
     )
+    if session_summary.get("parse_degraded"):
+        log_hook_issue(
+            "session_summary",
+            f"Transcript parse degraded: {session_summary.get('parse_degraded_reason', '')}",
+        )
 
     creds = {}
     try:
         creds = resolve_credentials()
-    except Exception:
-        pass
+    except Exception as e:
+        log_hook_issue("session_summary", "Failed to resolve credentials", e)
 
     payload = {
         **hook_data,
         **creds,
+        "event_id": _build_event_id(hook_data),
+        "event_source": "session_summary",
         "session_summary": session_summary,
         "plugin_version": "1.0.0",
     }
@@ -96,8 +118,22 @@ def main() -> None:
         )
         with urllib_request.urlopen(req, timeout=10):
             pass
-    except (URLError, OSError, Exception):
-        pass
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:800]
+        except Exception:
+            body = ""
+        log_hook_issue(
+            "session_summary",
+            (
+                "Failed to POST /api/push/hook-event "
+                f"(status={e.code}, response={body})"
+            ),
+            e,
+        )
+    except (URLError, OSError, Exception) as e:
+        log_hook_issue("session_summary", "Failed to POST /api/push/hook-event", e)
 
 
 if __name__ == "__main__":

@@ -15,17 +15,46 @@ Uses only stdlib. Always exits 0.
 import json
 import os
 import sys
+import hashlib
 from pathlib import Path
 from urllib import request as urllib_request
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from lib.auth import resolve_credentials  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
+from lib.hook_log import log_hook_issue  # type: ignore[import]
 
 # Bounded tail-read: last 32KB is sufficient for any recent turn pair
 TAIL_BYTES = 32 * 1024
+
+
+def _is_user_entry(entry_type: str) -> bool:
+    return entry_type in {"human", "user"}
+
+
+def _extract_user_text(entry: dict) -> str:
+    msg = entry.get("message", {})
+    content = msg.get("content", [])
+    if isinstance(content, list):
+        texts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                texts.append(block.get("text", ""))
+        return " ".join(texts).strip()[:2000]
+    if isinstance(content, str):
+        return content.strip()[:2000]
+    return ""
+
+
+def _build_event_id(hook_data: dict) -> str:
+    stable = {
+        k: v for k, v in hook_data.items()
+        if k not in {"event_id", "event_seq", "event_source", "plugin_version"}
+    }
+    blob = json.dumps(stable, sort_keys=True, default=str)
+    return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def extract_latest_turn(transcript_path: str) -> dict:
@@ -75,6 +104,8 @@ def extract_latest_turn(transcript_path: str) -> dict:
         assistant_response = ""
         task_create_order = []
         turn_index = 0
+        parse_degraded = False
+        parse_degraded_reason = ""
 
         # Walk backwards to find the most recent assistant turn, then user turn before it
         for i in range(len(entries) - 1, -1, -1):
@@ -106,32 +137,52 @@ def extract_latest_turn(transcript_path: str) -> dict:
                 continue
 
             # User message: extract prompt text
-            if assistant_response and not user_prompt and entry_type == "human":
-                msg = entry.get("message", {})
-                content = msg.get("content", [])
-                if isinstance(content, list):
-                    texts = []
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "text":
-                            texts.append(block.get("text", ""))
-                    user_prompt = " ".join(texts)[:2000]
-                elif isinstance(content, str):
-                    user_prompt = content[:2000]
-                break
+            if assistant_response and not user_prompt and _is_user_entry(entry_type):
+                user_prompt = _extract_user_text(entry)
+                if user_prompt:
+                    break
 
         # Approximate turn index from entry count
-        turn_index = max(0, len([e for e in entries if e.get("type") == "human"]))
+        turn_index = max(
+            0,
+            len(
+                [
+                    e for e in entries
+                    if _is_user_entry(e.get("type", "")) and _extract_user_text(e)
+                ]
+            ),
+        )
+        if assistant_response and not user_prompt:
+            parse_degraded = True
+            parse_degraded_reason = "assistant_seen_without_user_pair"
+            # Fallback: scan the full transcript to recover user_prompt/turn_index.
+            recovered_prompt, recovered_turn_index = _recover_user_context_full_scan(path)
+            if recovered_turn_index > turn_index:
+                turn_index = recovered_turn_index
+            if recovered_prompt:
+                user_prompt = recovered_prompt
+                parse_degraded = False
+                parse_degraded_reason = ""
 
         return {
             "user_prompt": user_prompt,
             "assistant_response": assistant_response,
             "turn_index": turn_index,
             "task_create_order": task_create_order,
+            "parse_degraded": parse_degraded,
+            "parse_degraded_reason": parse_degraded_reason,
         }
 
-    except Exception:
-        return {"user_prompt": "", "assistant_response": "", "turn_index": 0,
-                "task_create_order": []}
+    except Exception as e:
+        log_hook_issue("push_turn", "Failed while extracting latest turn", e)
+        return {
+            "user_prompt": "",
+            "assistant_response": "",
+            "turn_index": 0,
+            "task_create_order": [],
+            "parse_degraded": True,
+            "parse_degraded_reason": "extract_exception",
+        }
 
 
 def extract_token_cumulative(transcript_path: str) -> dict | None:
@@ -174,14 +225,41 @@ def extract_token_cumulative(transcript_path: str) -> dict | None:
             "cache_creation_tokens": cache_create,
             "model": model,
         }
-    except Exception:
+    except Exception as e:
+        log_hook_issue("push_turn", "Failed while scanning token totals", e)
         return None
+
+
+def _recover_user_context_full_scan(path: Path) -> tuple[str, int]:
+    """Recover user prompt and accurate turn count via full transcript scan."""
+    user_count = 0
+    last_user = ""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not _is_user_entry(entry.get("type", "")):
+                    continue
+                text = _extract_user_text(entry)
+                if text:
+                    last_user = text
+                    user_count += 1
+    except Exception:
+        return "", 0
+    return last_user, user_count
 
 
 def main() -> None:
     try:
         hook_data = json.load(sys.stdin)
-    except Exception:
+    except Exception as e:
+        log_hook_issue("push_turn", "Failed to parse hook payload JSON", e)
         sys.exit(0)
 
     transcript_path = hook_data.get("transcript_path", "")
@@ -192,6 +270,7 @@ def main() -> None:
 
     if not turn_payload or (not turn_payload.get("user_prompt") and not turn_payload.get("assistant_response")):
         # Nothing useful to push
+        log_hook_issue("push_turn", "Turn payload empty; skipping push")
         sys.exit(0)
 
     # Accumulate cumulative token counts for mid-session cost visibility.
@@ -205,12 +284,14 @@ def main() -> None:
     creds = {}
     try:
         creds = resolve_credentials()
-    except Exception:
-        pass
+    except Exception as e:
+        log_hook_issue("push_turn", "Failed to resolve credentials", e)
 
     payload = {
         **hook_data,
         **creds,
+        "event_id": _build_event_id(hook_data),
+        "event_source": "push_turn",
         "turn_payload": turn_payload,
         "plugin_version": "1.0.0",
     }
@@ -226,8 +307,23 @@ def main() -> None:
         )
         with urllib_request.urlopen(req, timeout=5):
             pass
-    except (URLError, OSError, Exception):
-        pass
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", errors="replace")[:800]
+        except Exception:
+            body = ""
+        log_hook_issue(
+            "push_turn",
+            (
+                "Failed to POST /api/push/hook-event "
+                f"(status={e.code}, event={hook_data.get('hook_event_name')}, "
+                f"response={body})"
+            ),
+            e,
+        )
+    except (URLError, OSError, Exception) as e:
+        log_hook_issue("push_turn", "Failed to POST /api/push/hook-event", e)
 
 
 if __name__ == "__main__":

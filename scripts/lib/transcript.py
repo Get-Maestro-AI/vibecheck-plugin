@@ -11,7 +11,6 @@ a thin extraction layer for session_summary.py.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +40,11 @@ def parse_transcript(path: str) -> dict:
         "files_modified": [],
         "error_count": 0,
         "consecutive_errors": 0,
+        "user_entries_total": 0,
+        "user_prompt_entries": 0,
+        "user_tool_result_entries": 0,
+        "parse_degraded": False,
+        "parse_degraded_reason": "",
     }
 
     try:
@@ -80,12 +84,17 @@ def parse_transcript(path: str) -> dict:
                 entry_type = entry.get("type", "")
 
                 # Human turn
-                if entry_type == "human":
+                if _is_user_entry(entry_type):
                     try:
+                        result["user_entries_total"] += 1
                         msg = entry.get("message", {})
                         content = msg.get("content", [])
                         text = _extract_text(content)
+                        has_tool_result = _has_tool_result_block(content)
+                        if has_tool_result:
+                            result["user_tool_result_entries"] += 1
                         if text:
+                            result["user_prompt_entries"] += 1
                             if not result["first_prompt"]:
                                 result["first_prompt"] = text[:2000]
                             result["final_prompt"] = text[:2000]
@@ -159,6 +168,11 @@ def parse_transcript(path: str) -> dict:
     result["files_modified"] = list(files_modified)[:50]
     result["error_count"] = error_count
     result["consecutive_errors"] = max_consecutive
+    if all_turns and result["total_turns"] == 0:
+        has_assistant = any(t.get("role") == "assistant" for t in all_turns)
+        if has_assistant:
+            result["parse_degraded"] = True
+            result["parse_degraded_reason"] = "assistant_seen_without_user_turns"
 
     # Conversation window (last N turns for LLM context)
     result["conversation_window"] = [
@@ -170,7 +184,7 @@ def parse_transcript(path: str) -> dict:
     result["objectives_raw"] = [
         {"role": t["role"], "text": t["text"], "turn_index": i}
         for i, t in enumerate(all_turns)
-        if t["role"] == "human"
+        if t["role"] == "human" and t["text"]
     ]
 
     return result
@@ -189,3 +203,16 @@ def _extract_text(content: Any) -> str:
                 parts.append(block.get("text", ""))
         return " ".join(p for p in parts if p)
     return ""
+
+
+def _is_user_entry(entry_type: str) -> bool:
+    return entry_type in {"human", "user"}
+
+
+def _has_tool_result_block(content: Any) -> bool:
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "tool_result":
+            return True
+    return False
