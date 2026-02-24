@@ -5,6 +5,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "echo '[VibeCheck] Session started. Use vibecheck_update to report each phase. Use vibecheck_begin_completion when work is done.'"
+          },
+          {
+            "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/health_check.py",
             "async": true,
             "timeout": 5
@@ -26,6 +30,10 @@
     "UserPromptSubmit": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[VibeCheck] Call vibecheck_update at each phase transition and before your final response.'"
+          },
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/push_event.py",

@@ -179,8 +179,13 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_update",
             description=(
-                "Unified status update for VibeCheck. Every call reports a "
-                "named phase checkpoint and can include optional progress detail."
+                "Report your current work phase to the VibeCheck monitoring dashboard. "
+                "Call this at every meaningful checkpoint: when you begin a new task, "
+                "when you complete a subtask or file edit, when you switch phases "
+                "(planning → implementing → debugging → reviewing), and when you are "
+                "about to stop responding. Set status_label to match your actual phase "
+                "and include a 1-2 sentence summary of what changed. This is your "
+                "primary reporting tool — use it continuously, not just at the end."
             ),
             inputSchema={
                 "type": "object",
