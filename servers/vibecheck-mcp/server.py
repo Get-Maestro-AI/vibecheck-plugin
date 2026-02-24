@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """VibeCheck MCP server — semantic self-reporting tools for Claude.
 
-Provides four tools that Claude calls proactively to report its state:
-  vibecheck_report_progress  — structured progress update
-  vibecheck_flag_uncertainty — uncertainty/confidence signal
-  vibecheck_request_guidance — explicit request for human input
-  vibecheck_checkpoint       — named milestone with status label
+Provides one unified telemetry tool for regular status updates:
+  vibecheck_update           — checkpoint updates with optional progress detail
+
+And dedicated completion/maintenance tools.
 
 Each tool call generates an MCPReport that gets POSTed to the VibeCheck
 server at /api/push/mcp-report, enabling:
   - Dashboard live status updates
   - AlignmentCheckDetector fast path (no LLM call when MCP data present)
   - PromptDriftDetector (checkpoint vs. first prompt)
-  - UncertaintyEscalationDetector
-  - GuidanceRequestDetector
 
 The server is launched by Claude Code when .mcp.json is present in the
 project root, and runs as a stdio subprocess.
@@ -180,12 +177,10 @@ _EVENT_SEQ = 0
 async def list_tools() -> list[types.Tool]:
     return [
         types.Tool(
-            name="vibecheck_report_progress",
+            name="vibecheck_update",
             description=(
-                "Report your current progress to VibeCheck. Call this when you "
-                "complete a significant subtask, hit a milestone, or start a new "
-                "phase of work. Helps the dashboard show accurate live status "
-                "and enables drift detection."
+                "Unified status update for VibeCheck. Every call reports a "
+                "named phase checkpoint and can include optional progress detail."
             ),
             inputSchema={
                 "type": "object",
@@ -209,84 +204,6 @@ async def list_tools() -> list[types.Tool]:
                         "enum": ["high", "medium", "low"],
                         "description": "Your confidence level in the current approach",
                     },
-                    "next_step": {
-                        "type": "string",
-                        "description": "What you plan to do next",
-                    },
-                },
-                "required": ["current_task"],
-            },
-        ),
-        types.Tool(
-            name="vibecheck_flag_uncertainty",
-            description=(
-                "Flag uncertainty or low confidence in your current approach. "
-                "Call this BEFORE proceeding when you are unsure about the correct "
-                "solution and continuing might cause problems that are hard to undo. "
-                "VibeCheck will escalate to the developer."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "uncertainty_about": {
-                        "type": "string",
-                        "description": "What specifically you are uncertain about",
-                    },
-                    "options_considered": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Options you considered (helps the developer understand the trade-off)",
-                    },
-                    "confidence": {
-                        "type": "string",
-                        "enum": ["medium", "low"],
-                        "description": "Your confidence level (medium = uncertain, low = very uncertain)",
-                    },
-                },
-                "required": ["uncertainty_about"],
-            },
-        ),
-        types.Tool(
-            name="vibecheck_request_guidance",
-            description=(
-                "Request explicit human guidance before proceeding. Use this when "
-                "you need a decision that requires human judgment, have reached a "
-                "fork where different choices lead to fundamentally different outcomes, "
-                "or discovered that the task requirements are ambiguous in a way that "
-                "matters. This triggers an immediate developer notification."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "The specific question you need answered",
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": "Background context to help the developer answer quickly",
-                    },
-                    "urgency": {
-                        "type": "string",
-                        "enum": ["normal", "blocking"],
-                        "description": "blocking = I cannot proceed at all without this answer",
-                    },
-                },
-                "required": ["question"],
-            },
-        ),
-        types.Tool(
-            name="vibecheck_checkpoint",
-            description=(
-                "Report a named milestone checkpoint. Call this at natural breakpoints "
-                "in your work: when you finish a planning phase, complete implementation, "
-                "finish debugging, or are about to do a significant final step. "
-                "Checkpoints enable prompt drift detection — VibeCheck compares each "
-                "checkpoint's summary to the original request."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
                     "status_label": {
                         "type": "string",
                         "enum": ["planning", "implementing", "debugging", "reviewing", "done"],
@@ -294,11 +211,11 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "summary": {
                         "type": "string",
-                        "description": "1-2 sentence summary of what has been accomplished so far",
+                        "description": "1-2 sentence checkpoint summary",
                     },
                     "next_step": {
                         "type": "string",
-                        "description": "What comes next",
+                        "description": "What you plan to do next",
                     },
                 },
                 "required": ["status_label", "summary"],
@@ -308,8 +225,8 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_dismiss_issue",
             description=(
                 "Dismiss a specific blocking issue from the VibeCheck dashboard after "
-                "you have fixed it. Call this after successfully resolving a [B1], [B2], "
-                "etc. issue identified by /vibecheck:review. Keeps the dashboard accurate "
+                "you have fixed it. Call this after successfully resolving a numeric "
+                "issue ID identified by /vibecheck:review. Keeps the dashboard accurate "
                 "so the developer sees real-time fix progress without re-running the full review."
             ),
             inputSchema={
@@ -317,7 +234,7 @@ async def list_tools() -> list[types.Tool]:
                 "properties": {
                     "issue_id": {
                         "type": "string",
-                        "description": "The issue label to dismiss, e.g. 'B1', 'B2'",
+                        "description": "The issue ID to dismiss, e.g. '401', '402'",
                     },
                     "resolution_note": {
                         "type": "string",
@@ -423,21 +340,41 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             ),
         )]
 
+    if name == "vibecheck_update":
+        status_label = (arguments.get("status_label") or "").strip()
+        summary = (arguments.get("summary") or "").strip()
+        if status_label not in {"planning", "implementing", "debugging", "reviewing", "done"}:
+            return [types.TextContent(
+                type="text",
+                text=(
+                    "Update blocked: status_label must be one of "
+                    "'planning', 'implementing', 'debugging', 'reviewing', or 'done'."
+                ),
+            )]
+        if not summary:
+            return [types.TextContent(
+                type="text",
+                text="Update blocked: include summary.",
+            )]
+    report_type = _tool_to_report_type(name)
+    if name == "vibecheck_update":
+        report_type = "checkpoint"
+
     report: dict = {
         "session_id": session_id,
         "cwd": cwd,
         "event_uuid": str(uuid.uuid4()),
         "event_seq": _EVENT_SEQ + 1,
-        "report_type": _tool_to_report_type(name),
+        "report_type": report_type,
         **arguments,
     }
     _EVENT_SEQ += 1
 
     post_mcp_report(report)
 
-    # Enforce completion handshake on done checkpoint: attempt finalize and
-    # return a blocked message when protocol review has not completed yet.
-    if name == "vibecheck_checkpoint" and arguments.get("status_label") == "done":
+    # Enforce completion handshake on done checkpoint updates: attempt finalize
+    # and return a blocked message when protocol review has not completed yet.
+    if name == "vibecheck_update" and arguments.get("status_label") == "done":
         result = post_finalize_objective(
             objective_id=arguments.get("objective_id", ""),
             checkpoint_summary=arguments.get("summary", ""),
@@ -460,10 +397,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     # Return a brief acknowledgment (not shown to user unless debug mode)
     ack_messages = {
-        "vibecheck_report_progress": f"Progress reported: {arguments.get('current_task', '')}",
-        "vibecheck_flag_uncertainty": f"Uncertainty flagged: {arguments.get('uncertainty_about', '')}",
-        "vibecheck_request_guidance": f"Guidance requested: {arguments.get('question', '')}",
-        "vibecheck_checkpoint": f"Checkpoint: {arguments.get('status_label', '')} — {arguments.get('summary', '')}",
+        "vibecheck_update": (
+            f"Checkpoint reported ({arguments.get('status_label', '')}): "
+            f"{arguments.get('summary', '')}"
+        ),
         "vibecheck_dismiss_issue": f"Issue {arguments.get('issue_id', '')} dismissed.",
         "vibecheck_begin_completion": "Completion protocol started.",
         "vibecheck_finalize_objective": "Objective finalize requested.",
@@ -474,10 +411,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
 def _tool_to_report_type(tool_name: str) -> str:
     return {
-        "vibecheck_report_progress": "progress",
-        "vibecheck_flag_uncertainty": "uncertainty",
-        "vibecheck_request_guidance": "guidance_request",
-        "vibecheck_checkpoint": "checkpoint",
+        "vibecheck_update": "checkpoint",
     }.get(tool_name, "progress")
 
 

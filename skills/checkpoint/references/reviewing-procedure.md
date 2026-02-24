@@ -21,7 +21,7 @@ The script returns one file path per line. If VibeCheck is unreachable, it print
 
 ## Step 2 — Union with recent report context
 
-Union the output from Step 1 with any `files_modified` from `vibecheck_report_progress` calls still in your context. If both sources are empty, derive the file list from your Edit/Write tool calls since the last `"implementing"` checkpoint.
+Union the output from Step 1 with any `files_modified` from `vibecheck_update` progress calls still in your context. If both sources are empty, derive the file list from your Edit/Write tool calls since the last `"implementing"` checkpoint update.
 
 **Do not proceed with an empty file list** — an empty list means the review covers nothing. Derive the list from your own tool history if needed.
 

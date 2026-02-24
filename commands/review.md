@@ -1,5 +1,5 @@
 ---
-description: Pre-commit code review. Finds blocking issues in staged changes and surfaces them in the VibeCheck dashboard.
+description: Review staged changes for bugs before committing
 allowed-tools: Bash, Read, Grep, Glob
 ---
 

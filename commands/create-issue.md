@@ -1,5 +1,5 @@
 ---
-description: Flag a code issue in the VibeCheck dashboard. The backend enriches the description with an LLM-generated title and action.
+description: Flag a problem so it appears in the VibeCheck dashboard
 allowed-tools: Bash
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: Dismiss one or more VibeCheck review issues by ID after fixing them.
+description: Clear one or more resolved issues from the dashboard
 allowed-tools: Bash
 ---
 

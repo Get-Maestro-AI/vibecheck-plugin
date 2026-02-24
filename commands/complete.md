@@ -1,5 +1,5 @@
 ---
-description: Run the full objective completion protocol end-to-end: begin completion, perform pre-commit review, then finalize if ready.
+description: Wrap up the current task: review code and mark the objective done
 allowed-tools: Bash, Read, Grep, Glob
 ---
 

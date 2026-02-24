@@ -1,5 +1,5 @@
 ---
-description: Investigate a VibeCheck issue and produce a concrete fix plan. Fetches the issue context (title, description, evidence, suggested action) from the dashboard by ID, reads the relevant code, and presents step-by-step next steps. Use when the user provides a VibeCheck issue ID (e.g. 401, 402) to investigate and fix.
+description: Walk through and fix a flagged issue by ID (e.g. 401)
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
