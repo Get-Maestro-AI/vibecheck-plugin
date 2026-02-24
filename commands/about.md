@@ -33,7 +33,7 @@ It runs in the background at `http://localhost:8420`. As you work, it automatica
 | `/vibecheck:create-issue <description>` | Flag a problem so it appears in the dashboard |
 | `/vibecheck:dismiss-issue <ID>` | Clear a resolved issue from the dashboard |
 | `/vibecheck:update <JSON>` | Post a progress checkpoint to the dashboard |
-| `/vibecheck:help` | Show this message |
+| `/vibecheck:about` | Show this message |
 
 ---
 
