@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '[VibeCheck] Session started. Use vibecheck_update to report each phase. Use vibecheck_begin_completion when work is done.'"
+            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Use /vibecheck:complete before finalizing substantial work.'"
           },
           {
             "type": "command",
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '[VibeCheck] Call vibecheck_update at each phase transition and before your final response.'"
+            "command": "echo '[VibeCheck] Call vibecheck_update at phase transitions. Before finalizing substantial work, run /vibecheck:complete.'"
           },
           {
             "type": "command",
