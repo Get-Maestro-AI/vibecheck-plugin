@@ -230,8 +230,8 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_dismiss_issue",
             description=(
                 "Dismiss a specific blocking issue from the VibeCheck dashboard after "
-                "you have fixed it. Call this after successfully resolving a numeric "
-                "issue ID identified by /vibecheck:review. Keeps the dashboard accurate "
+                "you have fixed it. Call this after successfully resolving an issue "
+                "identified by /vibecheck:review. Keeps the dashboard accurate "
                 "so the developer sees real-time fix progress without re-running the full review."
             ),
             inputSchema={
@@ -239,7 +239,7 @@ async def list_tools() -> list[types.Tool]:
                 "properties": {
                     "issue_id": {
                         "type": "string",
-                        "description": "The issue ID to dismiss, e.g. '401', '402'",
+                        "description": "The full project-prefixed issue ID to dismiss, e.g. 'VC-401', 'VC-402'. Always use the label shown on the issue card, not a bare number.",
                     },
                     "resolution_note": {
                         "type": "string",
@@ -254,7 +254,8 @@ async def list_tools() -> list[types.Tool]:
             description=(
                 "Begin objective completion protocol. Call this when work is ready "
                 "for final review. Returns the scoped files list and marks the "
-                "objective as pending protocol completion."
+                "objective as pending protocol completion. Prefer /vibecheck:complete "
+                "as the default completion workflow."
             ),
             inputSchema={
                 "type": "object",
@@ -275,7 +276,8 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_finalize_objective",
             description=(
                 "Finalize objective after completion protocol is complete. "
-                "This is blocked until a review payload has been submitted."
+                "This is blocked until a review payload has been submitted. "
+                "Prefer /vibecheck:complete for normal completion."
             ),
             inputSchema={
                 "type": "object",

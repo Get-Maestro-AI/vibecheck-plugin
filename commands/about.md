@@ -28,7 +28,7 @@ It runs in the background at `http://localhost:8420`. As you work, it automatica
 | Command | What it does |
 |---|---|
 | `/vibecheck:review` | Review staged changes for bugs before committing |
-| `/vibecheck:fix <ID>` | Walk through and fix a flagged issue (e.g. `/vibecheck:fix 401`) |
+| `/vibecheck:fix <ID>` | Walk through and fix a flagged issue (e.g. `/vibecheck:fix VC-401`) |
 | `/vibecheck:complete` | Wrap up the current task: review code and mark the objective done |
 | `/vibecheck:create-issue <description>` | Flag a problem so it appears in the dashboard |
 | `/vibecheck:dismiss-issue <ID>` | Clear a resolved issue from the dashboard |

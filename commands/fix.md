@@ -1,5 +1,5 @@
 ---
-description: Walk through and fix a flagged issue by ID (e.g. 401)
+description: Walk through and fix a flagged issue by ID (e.g. VC-401)
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -16,7 +16,7 @@ Investigate VibeCheck issue **$ARGUMENTS** and produce a concrete fix plan.
 You are in **investigation and planning mode**. Do not make any code changes yet.
 
 **Step 1 — Find the issue**
-In the JSON above, locate the alert where `label == "$ARGUMENTS"`, or whose `title` begins with `[$ARGUMENTS]`, or whose `id` equals `$ARGUMENTS` (stripped of any leading `#`). If alerts are empty or VibeCheck is unreachable, ask the user to paste the issue description before continuing.
+In the JSON above, locate the alert where `label == "$ARGUMENTS"`. Alert labels use the format `PREFIX-N` (e.g. `VC-405`). If alerts are empty or VibeCheck is unreachable, ask the user to paste the issue description before continuing.
 
 **Step 2 — Understand the issue**
 Read all four fields carefully:

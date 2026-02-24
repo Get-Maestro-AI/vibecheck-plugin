@@ -38,7 +38,7 @@ POST to `http://localhost:8420/api/push/vc-review`.
 - `ready_to_commit`: `true` only when `blocking_issues` is empty
 - If no blocking issues: `"blocking_issues": [], "ready_to_commit": true`
 - If no test gaps: `"test_gaps": []`
-- Do NOT include an `id` field in blocking issues — the server assigns B1, B2, ... labels automatically based on position
+- Do NOT include an `id` field in blocking issues — the server assigns project-prefixed labels (e.g. `VC-7`) automatically
 
 ## Server response
 

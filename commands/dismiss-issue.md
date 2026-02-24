@@ -21,5 +21,7 @@ After running each curl, report to the user:
 - Any errors (server unreachable, non-200 response)
 
 If no arguments are provided, explain usage:
-  `/vibecheck:dismiss-issue 401` — dismiss a single issue
-  `/vibecheck:dismiss-issue 401 402 403` — dismiss multiple issues at once
+  `/vibecheck:dismiss-issue VC-401` — dismiss a single issue
+  `/vibecheck:dismiss-issue VC-401 VC-402 VC-403` — dismiss multiple issues at once
+
+Issue IDs must use the full project-prefixed format shown on the issue card (e.g. "VC-401"), not a bare number.
