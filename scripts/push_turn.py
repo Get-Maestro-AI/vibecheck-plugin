@@ -124,14 +124,58 @@ def extract_latest_turn(transcript_path: str) -> dict:
                         block_type = block.get("type", "")
                         if block_type == "text":
                             texts.append(block.get("text", ""))
-                        elif block_type == "tool_use" and block.get("name") == "TaskCreate":
-                            # Capture the subject in the order it appears in the response.
-                            # This is the authoritative creation order: Claude Code assigns
-                            # sequential integer IDs (1, 2, …) in this exact order.
-                            subject = (block.get("input", {}).get("subject") or "").strip()
-                            if subject:
-                                task_create_order.append({"subject": subject})
-                    assistant_response = " ".join(texts)[:12000]  # increased from 4000
+                        elif block_type == "tool_use":
+                            name = block.get("name", "")
+                            inp = block.get("input", {})
+                            if name == "TaskCreate":
+                                subject = (inp.get("subject") or "").strip()
+                                if subject:
+                                    task_create_order.append({"subject": subject})
+                                    texts.append(f"`TaskCreate: {subject[:120]}`")
+                            elif name == "Bash":
+                                cmd = (inp.get("command") or "").strip()
+                                desc = (inp.get("description") or "").strip()
+                                header = f"*{desc}*\n" if desc else ""
+                                texts.append(f"\n{header}```bash\n{cmd[:800]}\n```")
+                            elif name in ("Edit", "Write", "NotebookEdit"):
+                                fp = (inp.get("file_path") or inp.get("notebook_path") or "").strip()
+                                texts.append(f"`{name}: {fp}`")
+                            elif name == "Read":
+                                fp = (inp.get("file_path") or "").strip()
+                                texts.append(f"`Read: {fp}`")
+                            elif name == "Grep":
+                                pattern = (inp.get("pattern") or "").strip()
+                                path = (inp.get("path") or "").strip()
+                                loc = f" in {path}" if path else ""
+                                texts.append(f"`Grep: \"{pattern[:60]}\"{loc}`")
+                            elif name == "Glob":
+                                pattern = (inp.get("pattern") or "").strip()
+                                texts.append(f"`Glob: {pattern}`")
+                            elif name == "Task":
+                                desc = (inp.get("description") or inp.get("prompt") or "").strip()
+                                texts.append(f"`Task (agent): {desc[:120]}`")
+                            elif name == "TaskUpdate":
+                                tid = inp.get("taskId", "")
+                                status = inp.get("status", "")
+                                if status:
+                                    texts.append(f"`TaskUpdate #{tid} → {status}`")
+                            elif name == "AskUserQuestion":
+                                questions = inp.get("questions") or []
+                                if questions:
+                                    q = (questions[0].get("question") or "").strip()
+                                    texts.append(f"`AskUser: {q[:120]}`")
+                            elif name == "WebFetch":
+                                url = (inp.get("url") or "").strip()
+                                texts.append(f"`WebFetch: {url[:120]}`")
+                            elif name == "WebSearch":
+                                query = (inp.get("query") or "").strip()
+                                texts.append(f"`WebSearch: {query[:120]}`")
+                            elif name.startswith("mcp__"):
+                                short = name.split("__")[-1]
+                                status_label = inp.get("status_label", "")
+                                label = f" [{status_label}]" if status_label else ""
+                                texts.append(f"`mcp:{short}{label}`")
+                    assistant_response = "\n\n".join(texts).strip()[:12000]  # increased from 4000
                 elif isinstance(content, str):
                     assistant_response = content[:12000]  # increased from 4000
                 continue
