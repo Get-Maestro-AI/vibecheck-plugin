@@ -58,28 +58,17 @@ If begin returns blocked, stop and report the reason.
 
 ---
 
-## Step 2 — Perform review and submit findings
+## Step 2 — Perform review
 
-Use the same correctness-focused criteria and payload schema as `/vibecheck:review`:
-- analyze staged diff (`git diff --cached`)
-- produce blocking issues only for real pre-commit risks
-- submit findings to:
+Run `/vibecheck:review` to perform the review. That command handles:
+- fetching active Rulesets from VibeCheck (`/api/review-context`)
+- analyzing the staged diff (falls back to working-tree diff vs HEAD when nothing is staged)
+- attributing findings to Rulesets where applicable
+- submitting findings to `/api/push/vc-review`
 
-```bash
-curl -s -X POST http://localhost:8420/api/push/vc-review \
-  -H "Content-Type: application/json" \
-  -d '<REVIEW_JSON_PAYLOAD>'
-```
+After `/vibecheck:review` completes, read its output to determine `ready_to_commit`.
 
-The payload must include:
-- `session_id`, `cwd`, `staged_files`
-- `blocking_issues` (possibly empty)
-- `test_gaps` (possibly empty)
-- `ready_to_commit` (boolean)
-
-Print the response JSON from `vc-review`.
-
-If `ready_to_commit` is false, stop after reporting issue IDs/titles and do not finalize.
+If `ready_to_commit` is false, stop after reporting issue IDs/titles and do not proceed to Step 3.
 
 ---
 

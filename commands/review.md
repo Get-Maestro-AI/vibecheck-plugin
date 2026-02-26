@@ -1,5 +1,5 @@
 ---
-description: Review staged changes for bugs before committing
+description: Review staged (or working-tree) changes for bugs before committing
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -14,14 +14,40 @@ You will perform a focused pre-commit code review of staged changes and report f
 ## Staged changes
 
 Staged files:
-!`git diff --cached --name-only 2>/dev/null || echo "(no staged files)"`
+!`STAGED=$(git diff --cached --name-only 2>/dev/null); if [ -n "$STAGED" ]; then echo "$STAGED"; else git diff --name-only HEAD 2>/dev/null || echo "(no changes)"; fi`
 
 Diff:
-!`git diff --cached 2>/dev/null || echo "(empty diff)"`
+!`STAGED_DIFF=$(git diff --cached 2>/dev/null); if [ -n "$STAGED_DIFF" ]; then echo "$STAGED_DIFF"; else git diff HEAD 2>/dev/null || echo "(empty diff)"; fi`
 
 ---
 
-## Review criteria
+## Active Rulesets
+
+Fetch current Rulesets from VibeCheck before analyzing. Capture the output — you will need the `id` values for the `rulesets_active` field in the payload.
+
+!`curl -s --max-time 3 "http://localhost:8420/api/review-context?cwd=$(pwd)" \
+  | python3 -c "
+import json, sys
+try:
+    ctx = json.load(sys.stdin)
+    rulesets = ctx.get('rulesets', [])
+    if not rulesets:
+        print('(no custom rulesets configured — using fallback criteria below)')
+    else:
+        print('RULESETS_ACTIVE_IDS=' + json.dumps([rs['id'] for rs in rulesets]))
+        print()
+        for rs in rulesets:
+            print(f'### {rs[\"name\"]}')
+            if rs.get('description'):
+                print(f'*{rs[\"description\"]}*')
+            for r in rs.get('rules', []):
+                print(f'- [{r[\"slug\"]}] {r[\"instruction\"]}')
+            print()
+except Exception:
+    print('(VibeCheck unreachable — using fallback criteria below)')
+" 2>/dev/null`
+
+## Fallback criteria (always apply if no Active Rulesets appear above)
 
 Only flag issues in these categories:
 - Correctness bugs (logic errors, off-by-one, wrong conditionals)
@@ -42,7 +68,7 @@ If no meaningful issues exist, the review should be clean (ready_to_commit: true
 
 ## Instructions
 
-1. Review the staged diff above. Read additional file context with Read/Grep/Glob if needed to evaluate correctness.
+1. Review the diff above (staged changes if any are staged; otherwise all working-tree changes vs HEAD). Read additional file context with Read/Grep/Glob if needed to evaluate correctness.
 2. Identify blocking issues. For each, determine: severity (High = must fix before commit, Medium = important but not blocking), exact location, and a concrete fix.
 3. Identify test gaps only where a specific uncovered scenario is risky.
 4. Decide: is this safe to commit as-is?
@@ -64,15 +90,18 @@ The JSON payload structure:
   "session_id": "!`echo ${CLAUDE_SESSION_ID:-unknown}`",
   "cwd": "!`pwd`",
   "staged_files": ["<from staged files list above>"],
+  "rulesets_active": ["<ids from RULESETS_ACTIVE_IDS above; use [] if VibeCheck was unreachable>"],
   "blocking_issues": [
     {
       "title": "<short title, max 80 chars>",
-      "category": "<from the review criteria list>",
+      "category": "<rule slug if from Active Rulesets; otherwise category name from Fallback list>",
       "severity": "High",
       "location": "<file.py:line or function name>",
       "problem": "<one sentence: what is wrong>",
       "why_risky": "<one sentence: what bad thing happens if this ships>",
-      "concrete_fix": "<specific code change or approach>"
+      "concrete_fix": "<specific code change or approach>",
+      "source_ruleset": "<Ruleset id if this finding was triggered by a named rule; omit if from Fallback criteria>",
+      "violated_rule": "<rule slug exactly as it appeared in [brackets] above; omit if source_ruleset is omitted>"
     }
   ],
   "test_gaps": [
@@ -86,7 +115,10 @@ The JSON payload structure:
 }
 ```
 
-Note: do not include an `id` field in blocking issues — the server assigns IDs automatically.
+Notes:
+- Do not include an `id` field in blocking issues — the server assigns IDs automatically.
+- `rulesets_active`: the list of Ruleset `id` values from the `RULESETS_ACTIVE_IDS` line above. If VibeCheck was unreachable or returned no rulesets, pass `[]`.
+- `source_ruleset` / `violated_rule`: only include when a finding was specifically triggered by a named rule from the Active Rulesets section. Omit both fields for findings from the Fallback criteria.
 
 If there are no blocking issues: `"blocking_issues": [], "ready_to_commit": true`
 If there are no test gaps: `"test_gaps": []`

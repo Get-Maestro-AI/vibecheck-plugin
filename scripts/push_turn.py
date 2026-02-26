@@ -131,9 +131,9 @@ def extract_latest_turn(transcript_path: str) -> dict:
                             subject = (block.get("input", {}).get("subject") or "").strip()
                             if subject:
                                 task_create_order.append({"subject": subject})
-                    assistant_response = " ".join(texts)[:4000]
+                    assistant_response = " ".join(texts)[:12000]  # increased from 4000
                 elif isinstance(content, str):
-                    assistant_response = content[:4000]
+                    assistant_response = content[:12000]  # increased from 4000
                 continue
 
             # User message: extract prompt text
