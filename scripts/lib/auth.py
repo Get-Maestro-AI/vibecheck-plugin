@@ -1,10 +1,15 @@
 """Credential resolution for plugin scripts.
 
-Merges auth fields into outgoing event payloads.
-Resolution order:
-  1. VIBECHECK_API_KEY env var → {"api_key_hint": key[:8]}
-  2. ~/.config/vibecheck/config.json api_key → same
-  3. Claim token → {"claim_token": token}
+resolve_auth_headers() returns an HTTP headers dict with Authorization: Bearer <key>
+when a plugin API key is configured.  Use this for all outgoing HTTP requests.
+
+resolve_credentials() is kept for backward compatibility but is no longer used
+by the main HTTP callers (push_event, push_turn, MCP server).
+
+Resolution order for both functions:
+  1. VIBECHECK_API_KEY env var
+  2. ~/.config/vibecheck/config.json  {"api_key": "vc_..."}
+  3. Claim token fallback (anonymous local use, credentials only)
 
 Always returns a dict (never raises).
 For local-only deployments the server accepts events without any auth.
@@ -15,23 +20,42 @@ from pathlib import Path
 from lib.claim import get_or_create_claim_token  # type: ignore[import]
 
 
-def resolve_credentials() -> dict:
-    """Return a dict of auth fields to merge into event payloads."""
-    # Check env var first
+def _resolve_api_key() -> str:
+    """Return the configured API key string, or empty string if none."""
     key = os.environ.get("VIBECHECK_API_KEY", "").strip()
     if key:
-        return {"api_key_hint": key[:8]}
-
-    # Check config file
+        return key
     config_path = Path.home() / ".config" / "vibecheck" / "config.json"
     if config_path.exists():
         try:
             data = json.loads(config_path.read_text())
             key = data.get("api_key", "").strip()
             if key:
-                return {"api_key_hint": key[:8]}
+                return key
         except Exception:
             pass
+    return ""
 
-    # Fall back to claim token (anonymous local use)
+
+def resolve_auth_headers() -> dict:
+    """Return HTTP headers dict for plugin requests.
+
+    Returns {"Authorization": "Bearer <key>"} when a plugin API key is
+    configured, otherwise an empty dict (anonymous local use).
+    """
+    key = _resolve_api_key()
+    if key:
+        return {"Authorization": f"Bearer {key}"}
+    return {}
+
+
+def resolve_credentials() -> dict:
+    """Return a dict of auth fields to merge into event payloads (legacy).
+
+    Kept for backward compatibility. Prefer resolve_auth_headers() for
+    new HTTP request code.
+    """
+    key = _resolve_api_key()
+    if key:
+        return {"api_key_hint": key[:8]}
     return {"claim_token": get_or_create_claim_token()}

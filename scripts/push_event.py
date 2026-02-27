@@ -21,7 +21,7 @@ from urllib.error import URLError, HTTPError
 # Add lib/ to path (works regardless of cwd)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib.auth import resolve_credentials  # type: ignore[import]
+from lib.auth import resolve_auth_headers  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
 from lib.hook_log import log_hook_issue  # type: ignore[import]
 
@@ -43,15 +43,14 @@ def main() -> None:
         log_hook_issue("push_event", "Failed to parse hook payload JSON", e)
         sys.exit(0)  # Never block Claude Code on bad input
 
-    creds = {}
+    auth_headers = {}
     try:
-        creds = resolve_credentials()
+        auth_headers = resolve_auth_headers()
     except Exception as e:
-        log_hook_issue("push_event", "Failed to resolve credentials", e)
+        log_hook_issue("push_event", "Failed to resolve auth headers", e)
 
     payload = {
         **hook_data,
-        **creds,
         "event_id": _build_event_id(hook_data),
         "event_source": "push_event",
         "plugin_version": "1.0.0",
@@ -63,7 +62,7 @@ def main() -> None:
         req = urllib_request.Request(
             f"{api_url}/api/push/hook-event",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **auth_headers},
             method="POST",
         )
         with urllib_request.urlopen(req, timeout=5):

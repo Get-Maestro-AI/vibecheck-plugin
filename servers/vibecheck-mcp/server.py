@@ -35,12 +35,12 @@ sys.path.insert(0, _SCRIPTS_DIR)
 
 try:
     from lib.config import get_api_url  # type: ignore[import]
-    from lib.auth import resolve_credentials  # type: ignore[import]
+    from lib.auth import resolve_auth_headers  # type: ignore[import]
     from lib.hook_log import log_hook_issue  # type: ignore[import]
 except ImportError:
     def get_api_url() -> str:
         return os.environ.get("VIBECHECK_API_URL", "http://localhost:8420")
-    def resolve_credentials() -> dict:
+    def resolve_auth_headers() -> dict:
         return {}
     def log_hook_issue(script: str, message: str, exc: Exception | None = None) -> None:
         try:
@@ -56,20 +56,18 @@ def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> dict:
     """POST a dismiss-issue request and return server result."""
     try:
         api_url = get_api_url()
-        creds = resolve_credentials()
         session_id, cwd = _get_session_context()
         payload = {
             "session_id": session_id,
             "cwd": cwd,
             "issue_id": issue_id,
             "resolution_note": resolution_note,
-            **creds,
         }
         data = json.dumps(payload, default=str).encode()
         req = urllib_request.Request(
             f"{api_url}/api/push/dismiss-issue",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **resolve_auth_headers()},
             method="POST",
         )
         with urllib_request.urlopen(req, timeout=5) as resp:
@@ -89,20 +87,18 @@ def post_begin_completion(objective_id: str = "", trigger: str = "manual") -> di
     """POST begin-completion handshake request and return server payload."""
     try:
         api_url = get_api_url()
-        creds = resolve_credentials()
         session_id, cwd = _get_session_context()
         payload = {
             "session_id": session_id,
             "cwd": cwd,
             "objective_id": objective_id,
             "trigger": trigger,
-            **creds,
         }
         data = json.dumps(payload, default=str).encode()
         req = urllib_request.Request(
             f"{api_url}/api/push/begin-completion",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **resolve_auth_headers()},
             method="POST",
         )
         with urllib_request.urlopen(req, timeout=8) as resp:
@@ -117,20 +113,18 @@ def post_finalize_objective(objective_id: str = "", checkpoint_summary: str = ""
     """POST finalize-objective request and return server payload."""
     try:
         api_url = get_api_url()
-        creds = resolve_credentials()
         session_id, cwd = _get_session_context()
         payload = {
             "session_id": session_id,
             "cwd": cwd,
             "objective_id": objective_id,
             "checkpoint_summary": checkpoint_summary,
-            **creds,
         }
         data = json.dumps(payload, default=str).encode()
         req = urllib_request.Request(
             f"{api_url}/api/push/finalize-objective",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **resolve_auth_headers()},
             method="POST",
         )
         with urllib_request.urlopen(req, timeout=8) as resp:
@@ -145,13 +139,11 @@ def post_mcp_report(report_data: dict) -> None:
     """POST an MCPReport to the VibeCheck server (fire and forget)."""
     try:
         api_url = get_api_url()
-        creds = resolve_credentials()
-        payload = {**report_data, **creds}
-        data = json.dumps(payload, default=str).encode()
+        data = json.dumps(report_data, default=str).encode()
         req = urllib_request.Request(
             f"{api_url}/api/push/mcp-report",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **resolve_auth_headers()},
             method="POST",
         )
         with urllib_request.urlopen(req, timeout=5):
