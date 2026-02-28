@@ -11,13 +11,107 @@ You will perform a focused pre-commit code review of staged changes and report f
 
 ---
 
-## Staged changes
+## Changes to review
 
-Staged files:
-!`STAGED=$(git diff --cached --name-only 2>/dev/null); if [ -n "$STAGED" ]; then echo "$STAGED"; else git diff --name-only HEAD 2>/dev/null || echo "(no changes)"; fi`
+!`python3 - <<'PY'
+import json, os, subprocess, urllib.request, urllib.parse
 
-Diff:
-!`STAGED_DIFF=$(git diff --cached 2>/dev/null); if [ -n "$STAGED_DIFF" ]; then echo "$STAGED_DIFF"; else git diff HEAD 2>/dev/null || echo "(empty diff)"; fi`
+cwd = os.getcwd()
+
+# ── 1. Fetch objective context from VibeCheck ────────────────────────────────
+obj_files = []
+obj_started_at = ""
+obj_title = ""
+try:
+    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode({"cwd": cwd})
+    resp = urllib.request.urlopen(url, timeout=3)
+    ctx = json.loads(resp.read())
+    obj_files = ctx.get("objective_files") or []
+    obj_started_at = ctx.get("objective_started_at") or ""
+    obj_title = ctx.get("objective_title") or ""
+except Exception:
+    pass
+
+def git(*args):
+    r = subprocess.run(["git"] + list(args), capture_output=True, text=True, cwd=cwd)
+    return r.stdout.strip()
+
+# ── 2. Build diff ─────────────────────────────────────────────────────────────
+if obj_files:
+    print(f"Objective: {obj_title}")
+    print(f"Files changed during objective ({len(obj_files)}):")
+    for f in obj_files:
+        print(f"  {f}")
+    print()
+
+    # Find the commit that was HEAD just before the objective started
+    base = ""
+    if obj_started_at:
+        base = git("log", f"--before={obj_started_at}", "--format=%H", "-1")
+
+    # Fall back to 10-commit lookback if timestamp lookup fails
+    if not base:
+        all_commits = git("log", "--format=%H").splitlines()
+        base = all_commits[9] if len(all_commits) >= 10 else (all_commits[-1] if all_commits else "")
+
+    # Committed changes to objective files since base
+    committed = ""
+    if base:
+        committed = git("diff", f"{base}..HEAD", "--", *obj_files)
+
+    # Any uncommitted changes (staged or unstaged) to those files
+    uncommitted = git("diff", "HEAD", "--", *obj_files)
+
+    if committed:
+        print("### Committed changes (since objective started)")
+        print(committed[:60000])  # cap at ~60KB
+        print()
+    if uncommitted:
+        print("### Uncommitted changes (staged / working tree)")
+        print(uncommitted[:20000])
+        print()
+    if not committed and not uncommitted:
+        print("(no diff found for objective files — showing HEAD diff as fallback)")
+        print(git("diff", "HEAD") or "(empty diff)")
+else:
+    # Fallback: staged → working tree vs HEAD
+    print("(No objective file list available — falling back to staged/HEAD diff)")
+    print()
+    staged = git("diff", "--cached")
+    if staged:
+        print("### Staged changes")
+        print(staged[:60000])
+    else:
+        fallback = git("diff", "HEAD")
+        print(fallback[:60000] if fallback else "(empty diff)")
+PY
+`
+
+Reviewed files:
+!`python3 - <<'PY'
+import json, os, subprocess, urllib.request, urllib.parse
+
+cwd = os.getcwd()
+obj_files = []
+try:
+    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode({"cwd": cwd})
+    resp = urllib.request.urlopen(url, timeout=3)
+    ctx = json.loads(resp.read())
+    obj_files = ctx.get("objective_files") or []
+except Exception:
+    pass
+
+if obj_files:
+    for f in obj_files:
+        print(f)
+else:
+    def git(*args):
+        r = subprocess.run(["git"] + list(args), capture_output=True, text=True, cwd=cwd)
+        return r.stdout.strip()
+    staged = git("diff", "--cached", "--name-only")
+    print(staged if staged else git("diff", "--name-only", "HEAD") or "(no changes)")
+PY
+`
 
 ---
 
@@ -68,7 +162,7 @@ If no meaningful issues exist, the review should be clean (ready_to_commit: true
 
 ## Instructions
 
-1. Review the diff above (staged changes if any are staged; otherwise all working-tree changes vs HEAD). Read additional file context with Read/Grep/Glob if needed to evaluate correctness.
+1. Review the diff above (objective files diffed from their base commit when VibeCheck is available; otherwise staged changes or working-tree vs HEAD). Read additional file context with Read/Grep/Glob if needed to evaluate correctness.
 2. Identify blocking issues. For each, determine: severity (High = must fix before commit, Medium = important but not blocking), exact location, and a concrete fix.
 3. Identify test gaps only where a specific uncovered scenario is risky.
 4. Decide: is this safe to commit as-is?
@@ -89,7 +183,7 @@ The JSON payload structure:
 {
   "session_id": "!`echo ${CLAUDE_SESSION_ID:-unknown}`",
   "cwd": "!`pwd`",
-  "staged_files": ["<from staged files list above>"],
+  "staged_files": ["<from Reviewed files list above>"],
   "rulesets_active": ["<ids from RULESETS_ACTIVE_IDS above; use [] if VibeCheck was unreachable>"],
   "blocking_issues": [
     {
