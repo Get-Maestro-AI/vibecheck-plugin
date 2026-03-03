@@ -173,8 +173,16 @@ If no meaningful issues exist, the review should be clean (ready_to_commit: true
 Build the JSON payload with your actual findings, then run this curl command:
 
 ```bash
-curl -s -X POST http://localhost:8420/api/push/vc-review \
+_VC_CONF="$HOME/.config/vibecheck/config.json"
+_VC_KEY="${VIBECHECK_API_KEY:-$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${VIBECHECK_API_URL:-$(sed -n 's/.*"api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
+_AUTH_ARGS=()
+[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
+
+curl -s -X POST "$_VC_URL/api/push/vc-review" \
   -H "Content-Type: application/json" \
+  "${_AUTH_ARGS[@]}" \
   -d '<YOUR_JSON_PAYLOAD>'
 ```
 

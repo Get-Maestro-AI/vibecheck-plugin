@@ -66,8 +66,16 @@ print(json.dumps(payload))
 PY
 )
 
-curl -s -X POST http://localhost:8420/api/push/mcp-report \
+_VC_CONF="$HOME/.config/vibecheck/config.json"
+_VC_KEY="${VIBECHECK_API_KEY:-$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${VIBECHECK_API_URL:-$(sed -n 's/.*"api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
+_AUTH_ARGS=()
+[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
+
+curl -s -X POST "$_VC_URL/api/push/mcp-report" \
   -H "Content-Type: application/json" \
+  "${_AUTH_ARGS[@]}" \
   -d "$PAYLOAD"
 ```
 

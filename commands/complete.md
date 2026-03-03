@@ -48,8 +48,16 @@ PY
 )
 fi
 
-BEGIN_RESPONSE=$(curl -s -X POST http://localhost:8420/api/push/begin-completion \
+_VC_CONF="$HOME/.config/vibecheck/config.json"
+_VC_KEY="${VIBECHECK_API_KEY:-$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${VIBECHECK_API_URL:-$(sed -n 's/.*"api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
+_AUTH_ARGS=()
+[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
+
+BEGIN_RESPONSE=$(curl -s -X POST "$_VC_URL/api/push/begin-completion" \
   -H "Content-Type: application/json" \
+  "${_AUTH_ARGS[@]}" \
   -d "$BEGIN_PAYLOAD")
 echo "$BEGIN_RESPONSE"
 ```
@@ -91,8 +99,16 @@ print(json.dumps(payload))
 PY
 )
 
-FINALIZE_RESPONSE=$(curl -s -X POST http://localhost:8420/api/push/finalize-objective \
+_VC_CONF="$HOME/.config/vibecheck/config.json"
+_VC_KEY="${VIBECHECK_API_KEY:-$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${VIBECHECK_API_URL:-$(sed -n 's/.*"api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
+_AUTH_ARGS=()
+[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
+
+FINALIZE_RESPONSE=$(curl -s -X POST "$_VC_URL/api/push/finalize-objective" \
   -H "Content-Type: application/json" \
+  "${_AUTH_ARGS[@]}" \
   -d "$FINALIZE_PAYLOAD")
 echo "$FINALIZE_RESPONSE"
 ```
