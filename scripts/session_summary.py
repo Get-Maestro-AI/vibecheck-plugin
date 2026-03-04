@@ -22,7 +22,7 @@ from urllib.error import URLError, HTTPError
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib.auth import resolve_credentials  # type: ignore[import]
+from lib.auth import resolve_auth_headers  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
 from lib.hook_log import log_hook_issue  # type: ignore[import]
 from lib.transcript import parse_transcript  # type: ignore[import]
@@ -92,15 +92,14 @@ def main() -> None:
             f"Transcript parse degraded: {session_summary.get('parse_degraded_reason', '')}",
         )
 
-    creds = {}
+    auth_headers = {}
     try:
-        creds = resolve_credentials()
+        auth_headers = resolve_auth_headers()
     except Exception as e:
-        log_hook_issue("session_summary", "Failed to resolve credentials", e)
+        log_hook_issue("session_summary", "Failed to resolve auth headers", e)
 
     payload = {
         **hook_data,
-        **creds,
         "event_id": _build_event_id(hook_data),
         "event_source": "session_summary",
         "session_summary": session_summary,
@@ -113,7 +112,7 @@ def main() -> None:
         req = urllib_request.Request(
             f"{api_url}/api/push/hook-event",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **auth_headers},
             method="POST",
         )
         with urllib_request.urlopen(req, timeout=10):

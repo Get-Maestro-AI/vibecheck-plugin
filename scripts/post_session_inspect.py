@@ -22,7 +22,7 @@ from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib.auth import resolve_credentials  # type: ignore[import]
+from lib.auth import resolve_auth_headers  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
 from lib.hook_log import log_hook_issue  # type: ignore[import]
 
@@ -41,11 +41,10 @@ def _build_event_id(hook_data: dict) -> str:
     return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
 
 
-def push_inspection(hook_data: dict, creds: dict, inspection: dict) -> None:
+def push_inspection(hook_data: dict, auth_headers: dict, inspection: dict) -> None:
     """POST inspection results to the server (fire and forget)."""
     payload = {
         **hook_data,
-        **creds,
         "event_id": _build_event_id(hook_data),
         "event_source": "post_session_inspect",
         "inspection_results": inspection,
@@ -57,7 +56,7 @@ def push_inspection(hook_data: dict, creds: dict, inspection: dict) -> None:
         req = urllib_request.Request(
             f"{api_url}/api/push/hook-event",
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **auth_headers},
             method="POST",
         )
         with urllib_request.urlopen(req, timeout=5):
@@ -152,11 +151,11 @@ def main() -> None:
         log_hook_issue("post_session_inspect", "Missing cwd or cwd is not a directory")
         sys.exit(0)
 
-    creds = {}
+    auth_headers = {}
     try:
-        creds = resolve_credentials()
+        auth_headers = resolve_auth_headers()
     except Exception as e:
-        log_hook_issue("post_session_inspect", "Failed to resolve credentials", e)
+        log_hook_issue("post_session_inspect", "Failed to resolve auth headers", e)
 
     # Phase 1: TODOs and FIXMEs (fast grep — POST immediately)
     todos = grep_pattern("TODO", cwd, MAX_TODOS)
@@ -174,7 +173,7 @@ def main() -> None:
     }
 
     # Push partial results (grep findings) immediately
-    push_inspection(hook_data, creds, inspection)
+    push_inspection(hook_data, auth_headers, inspection)
 
     # Phase 2: optional build check (only if a build command is detected)
     build_cmd = detect_build_command(cwd)
@@ -192,12 +191,12 @@ def main() -> None:
             inspection["build_status"] = status
             inspection["build_output"] = output
             # Push updated results with build outcome
-            push_inspection(hook_data, creds, inspection)
+            push_inspection(hook_data, auth_headers, inspection)
         except subprocess.TimeoutExpired:
             inspection["build_status"] = "error"
             inspection["build_output"] = "Build command timed out"
             log_hook_issue("post_session_inspect", "Build command timed out")
-            push_inspection(hook_data, creds, inspection)
+            push_inspection(hook_data, auth_headers, inspection)
         except Exception as e:
             log_hook_issue("post_session_inspect", "Build command failed", e)
 
