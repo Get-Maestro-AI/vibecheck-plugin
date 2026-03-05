@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from lib.auth import resolve_auth_headers  # type: ignore[import]
 from lib.config import get_api_url  # type: ignore[import]
 from lib.hook_log import log_hook_issue  # type: ignore[import]
+from lib.transcript import detect_waiting_context  # type: ignore[import]
 
 
 def _build_event_id(hook_data: dict) -> str:
@@ -49,12 +50,25 @@ def main() -> None:
     except Exception as e:
         log_hook_issue("push_event", "Failed to resolve auth headers", e)
 
+    # On PreToolUse, scan the JSONL tail to detect user-blocking tool calls.
+    # This lets the backend set waiting status without hardcoding tool names.
+    waiting_context = None
+    if hook_data.get("hook_event_name") == "PreToolUse":
+        transcript_path = hook_data.get("transcript_path", "")
+        if transcript_path:
+            try:
+                waiting_context = detect_waiting_context(transcript_path)
+            except Exception:
+                pass
+
     payload = {
         **hook_data,
         "event_id": _build_event_id(hook_data),
         "event_source": "push_event",
         "plugin_version": "1.0.0",
     }
+    if waiting_context is not None:
+        payload["waiting_context"] = waiting_context
 
     try:
         api_url = get_api_url()

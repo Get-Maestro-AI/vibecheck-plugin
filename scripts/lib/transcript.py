@@ -216,3 +216,118 @@ def _has_tool_result_block(content: Any) -> bool:
         if isinstance(block, dict) and block.get("type") == "tool_result":
             return True
     return False
+
+
+# ── Waiting-state detection ───────────────────────────────────────────────────
+
+# Tools whose PreToolUse signals that the user must respond before Claude
+# can continue. PostToolUse never fires for these — the approval is handled
+# by the Claude Code CLI outside the normal tool-result path.
+_USER_BLOCKING_TOOLS: set[str] = {"ExitPlanMode", "AskUserQuestion"}
+
+# Tail size for waiting-state scan: small because we only need the last
+# assistant entry, not a full turn pair.
+_WAITING_SCAN_BYTES = 32 * 1024
+
+
+def detect_waiting_context(transcript_path: str) -> dict | None:
+    """Scan the JSONL tail to detect if the session is waiting for user input.
+
+    Reads the last _WAITING_SCAN_BYTES of the transcript, finds the most
+    recent assistant message, and checks whether its last tool_use block is
+    a known user-blocking tool with no corresponding tool_result.
+
+    Returns a dict if waiting is detected:
+        {
+          "is_waiting": True,
+          "waiting_tool": str,           # e.g. "ExitPlanMode"
+          "plan": str | None,            # ExitPlanMode plan text, if present
+          "allowed_prompts": list | None, # ExitPlanMode allowedPrompts, if present
+          "question": str | None,         # AskUserQuestion text, if present
+        }
+
+    Returns None if not waiting or on any error.
+    """
+    try:
+        path = Path(transcript_path)
+        if not path.exists():
+            return None
+
+        file_size = path.stat().st_size
+        seek_pos = max(0, file_size - _WAITING_SCAN_BYTES)
+
+        with open(path, "rb") as f:
+            f.seek(seek_pos)
+            if seek_pos > 0:
+                f.readline()  # skip possible partial first line
+            tail_bytes = f.read()
+
+        lines = tail_bytes.decode("utf-8", errors="replace").splitlines()
+
+        # Collect all parsed entries from the tail
+        entries = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+        # Walk backwards to find the last complete assistant entry
+        last_assistant_tool_uses: list[dict] = []
+        last_assistant_idx = -1
+        for i in range(len(entries) - 1, -1, -1):
+            if entries[i].get("type") == "assistant":
+                msg = entries[i].get("message", {})
+                content = msg.get("content", [])
+                if isinstance(content, list):
+                    last_assistant_tool_uses = [
+                        b for b in content
+                        if isinstance(b, dict) and b.get("type") == "tool_use"
+                    ]
+                last_assistant_idx = i
+                break
+
+        if not last_assistant_tool_uses or last_assistant_idx < 0:
+            return None
+
+        # Collect tool_use ids that have a tool_result in entries AFTER the assistant
+        resolved_ids: set[str] = set()
+        for entry in entries[last_assistant_idx + 1:]:
+            msg = entry.get("message", {})
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        tid = block.get("tool_use_id", "")
+                        if tid:
+                            resolved_ids.add(tid)
+
+        # Check each tool_use for an unresolved user-blocking call
+        for tool_block in last_assistant_tool_uses:
+            tool_name = tool_block.get("name", "")
+            tool_id = tool_block.get("id", "")
+            if tool_name not in _USER_BLOCKING_TOOLS:
+                continue
+            if tool_id and tool_id in resolved_ids:
+                continue  # already resolved — user already responded
+            # Unresolved user-blocking tool found
+            inp = tool_block.get("input") or {}
+            ctx: dict = {"is_waiting": True, "waiting_tool": tool_name}
+            if tool_name == "ExitPlanMode":
+                ctx["plan"] = inp.get("plan") or None
+                ctx["allowed_prompts"] = inp.get("allowedPrompts") or None
+                ctx["question"] = None
+            elif tool_name == "AskUserQuestion":
+                questions = inp.get("questions") or []
+                ctx["question"] = questions[0].get("question") if questions else None
+                ctx["plan"] = None
+                ctx["allowed_prompts"] = None
+            return ctx
+
+        return None
+
+    except Exception:
+        return None
