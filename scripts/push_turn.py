@@ -164,6 +164,10 @@ def extract_latest_turn(transcript_path: str) -> dict:
                                 if questions:
                                     q = (questions[0].get("question") or "").strip()
                                     texts.append(f"`AskUser: {q[:120]}`")
+                            elif name == "ExitPlanMode":
+                                texts.append("`ExitPlanMode: awaiting plan approval`")
+                            elif name == "EnterPlanMode":
+                                texts.append("`EnterPlanMode`")
                             elif name == "WebFetch":
                                 url = (inp.get("url") or "").strip()
                                 texts.append(f"`WebFetch: {url[:120]}`")
@@ -196,10 +200,14 @@ def extract_latest_turn(transcript_path: str) -> dict:
                 ]
             ),
         )
-        if assistant_response and not user_prompt:
+        if not user_prompt:
             parse_degraded = True
             parse_degraded_reason = "assistant_seen_without_user_pair"
             # Fallback: scan the full transcript to recover user_prompt/turn_index.
+            # Runs whenever user_prompt is missing — covers both the normal "assistant
+            # present but user fell outside 32KB tail" case and the case where the
+            # tail only contained unhandled tool_use blocks (e.g. ExitPlanMode on a
+            # large transcript), leaving assistant_response empty as well.
             recovered_prompt, recovered_turn_index = _recover_user_context_full_scan(path)
             if recovered_turn_index > turn_index:
                 turn_index = recovered_turn_index
