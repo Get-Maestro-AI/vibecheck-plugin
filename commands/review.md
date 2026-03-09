@@ -3,11 +3,13 @@ description: Review staged (or working-tree) changes for bugs before committing
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-You will perform a focused pre-commit code review of staged changes and report findings to the VibeCheck dashboard.
+You will perform a focused pre-commit code review of your recent changes and report findings to the VibeCheck dashboard.
 
 **Your job is NOT general feedback. Your job is: find real problems that should be fixed before this commit.**
 
 > **IMPORTANT: Do not make any code changes during this review.** Your only action is to analyze the diff, POST findings to VibeCheck, and present results to the user. Fixes happen separately, after the user decides which issues to address.
+
+**Scope:** The diff below is automatically scoped to the current session's objective when available. If no objective was found, it falls back to staged or uncommitted changes. If the diff shown below doesn't match the work you've been doing in this session, use your own judgment — review your recent changes by examining `git diff HEAD` or `git diff` for the files you actually modified.
 
 ---
 
@@ -17,13 +19,17 @@ You will perform a focused pre-commit code review of staged changes and report f
 import json, os, subprocess, urllib.request, urllib.parse
 
 cwd = os.getcwd()
+session_id = os.environ.get("CLAUDE_SESSION_ID", "")
 
 # ── 1. Fetch objective context from VibeCheck ────────────────────────────────
 obj_files = []
 obj_started_at = ""
 obj_title = ""
 try:
-    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode({"cwd": cwd})
+    params = {"cwd": cwd}
+    if session_id:
+        params["session_id"] = session_id
+    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode(params)
     resp = urllib.request.urlopen(url, timeout=3)
     ctx = json.loads(resp.read())
     obj_files = ctx.get("objective_files") or []
@@ -74,8 +80,8 @@ if obj_files:
         print("(no diff found for objective files — showing HEAD diff as fallback)")
         print(git("diff", "HEAD") or "(empty diff)")
 else:
-    # Fallback: staged → working tree vs HEAD
-    print("(No objective file list available — falling back to staged/HEAD diff)")
+    # No objective context — show staged or recent uncommitted changes
+    print("(No current objective found for this session — showing recent changes)")
     print()
     staged = git("diff", "--cached")
     if staged:
@@ -92,9 +98,13 @@ Reviewed files:
 import json, os, subprocess, urllib.request, urllib.parse
 
 cwd = os.getcwd()
+session_id = os.environ.get("CLAUDE_SESSION_ID", "")
 obj_files = []
 try:
-    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode({"cwd": cwd})
+    params = {"cwd": cwd}
+    if session_id:
+        params["session_id"] = session_id
+    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode(params)
     resp = urllib.request.urlopen(url, timeout=3)
     ctx = json.loads(resp.read())
     obj_files = ctx.get("objective_files") or []
