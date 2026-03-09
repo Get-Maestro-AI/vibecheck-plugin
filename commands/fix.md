@@ -1,11 +1,15 @@
 ---
-description: Walk through and fix a flagged issue by ID (e.g. VC-401)
+description: Walk through and fix a flagged issue by ID (e.g. ISS-42)
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
 Investigate VibeCheck issue **$ARGUMENTS** and produce a concrete fix plan.
 
-## Active alerts for this project
+## Context lookup
+
+!`curl -s --max-time 3 "http://localhost:8420/api/contexts/$ARGUMENTS" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo '{"error":"Context not found or VibeCheck unreachable"}'`
+
+## Fallback: active alerts for this project
 
 !`curl -s --max-time 3 "http://localhost:8420/api/projects/$(basename "$(pwd)")/alerts" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo '{"alerts":[],"error":"VibeCheck unreachable — is the server running?"}'`
 
@@ -16,17 +20,19 @@ Investigate VibeCheck issue **$ARGUMENTS** and produce a concrete fix plan.
 You are in **investigation and planning mode**. Do not make any code changes yet.
 
 **Step 1 — Find the issue**
-In the JSON above, locate the alert where `label == "$ARGUMENTS"`. Alert labels use the format `PREFIX-N` (e.g. `VC-405`). If alerts are empty or VibeCheck is unreachable, ask the user to paste the issue description before continuing.
+First check the "Context lookup" result above. If it returned a valid context (has `id`, `title`, `brief`), use that as your issue. The `brief` field contains the problem description, evidence, and suggested fix.
+
+If the context lookup failed, fall back to the "active alerts" JSON. Locate the alert where `label == "$ARGUMENTS"`. Alert labels use the format `PREFIX-N` (e.g. `VC-405`).
+
+If both are empty or VibeCheck is unreachable, ask the user to paste the issue description before continuing.
 
 **Step 2 — Understand the issue**
-Read all four fields carefully:
-- `description` — what is wrong and why it's risky
-- `evidence` — the exact location (file and line/function) and which staged files are involved
-- `suggested_action` — the direction of the fix
-- `title` — the short label
+Read all available fields carefully:
+- For contexts: `brief` contains the full description including problem, evidence, and suggested fix
+- For alerts: `description`, `evidence`, `suggested_action`, `title`
 
 **Step 3 — Locate the code**
-Use Grep, Glob, and Read to find the specific file(s) and line(s) from the `evidence` field. Read enough surrounding context to understand the full picture — callers, consumers, related logic.
+Use Grep, Glob, and Read to find the specific file(s) and line(s) from the evidence. Read enough surrounding context to understand the full picture — callers, consumers, related logic.
 
 **Step 4 — Investigate root cause**
 Understand *why* the problem exists, not just where. Check whether fixing it at the identified location is sufficient or whether related call sites also need updating.
