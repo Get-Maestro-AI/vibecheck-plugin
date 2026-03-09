@@ -7,11 +7,11 @@ Investigate VibeCheck issue **$ARGUMENTS** and produce a concrete fix plan.
 
 ## Context lookup
 
-!`curl -s --max-time 3 "http://localhost:8420/api/contexts/$ARGUMENTS" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo '{"error":"Context not found or VibeCheck unreachable"}'`
+!`_VC_CONF="$HOME/.config/vibecheck/config.json"; _VC_KEY="${VIBECHECK_API_KEY:-$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"; _VC_URL="${VIBECHECK_API_URL:-$(sed -n 's/.*"api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"; _VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"; _AUTH_ARGS=(); [ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY"); curl -s --max-time 3 "${_AUTH_ARGS[@]}" "$_VC_URL/api/contexts/$ARGUMENTS" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo '{"error":"Context not found or VibeCheck unreachable"}'`
 
 ## Fallback: active alerts for this project
 
-!`curl -s --max-time 3 "http://localhost:8420/api/projects/$(basename "$(pwd)")/alerts" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo '{"alerts":[],"error":"VibeCheck unreachable — is the server running?"}'`
+!`_VC_CONF="$HOME/.config/vibecheck/config.json"; _VC_KEY="${VIBECHECK_API_KEY:-$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"; _VC_URL="${VIBECHECK_API_URL:-$(sed -n 's/.*"api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"; _VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"; _AUTH_ARGS=(); [ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY"); curl -s --max-time 3 "${_AUTH_ARGS[@]}" "$_VC_URL/api/projects/$(basename "$(pwd)")/alerts" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo '{"alerts":[],"error":"VibeCheck unreachable — is the server running?"}'`
 
 ---
 
