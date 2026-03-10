@@ -1,11 +1,14 @@
 ---
-description: Deprecated — use /vibecheck:resolve instead
+description: Resolve a context (issue, spec, etc.) from the VibeCheck dashboard
 allowed-tools: Bash
 ---
 
-**Deprecated:** Use `/vibecheck:resolve` instead. It accepts UUID or ISS-XX label and works for all context types.
+Resolve the specified context(s) in the VibeCheck dashboard.
 
-Redirecting to resolve behavior for: $ARGUMENTS
+Context IDs to resolve (space-separated): $ARGUMENTS
+
+Accepts either the UUID returned by `/vibecheck:review` or the ISS-XX label shown on the dashboard.
+Use the ID exactly as returned — do not guess.
 
 For each ID in the arguments, run the following curl command (substituting the actual ID):
 
@@ -23,4 +26,12 @@ curl -s -X POST "$_VC_URL/api/push/dismiss-issue" \
   -d "{\"session_id\": \"${CLAUDE_SESSION_ID:-unknown}\", \"cwd\": \"$(pwd)\", \"issue_id\": \"<ID>\"}"
 ```
 
-After running each curl, report results. Then remind the user to prefer `/vibecheck:resolve` going forward.
+After running each curl, report to the user:
+- Which contexts were resolved (server returned `{"dismissed": 1}`)
+- Which were not found (server returned `{"dismissed": 0}`)
+- Any errors (server unreachable, non-200 response)
+
+If no arguments are provided, explain usage:
+  `/vibecheck:resolve ISS-33` — resolve by ISS-XX label
+  `/vibecheck:resolve 3f8a1b2c-...` — resolve by UUID
+  `/vibecheck:resolve ISS-33 ISS-34` — resolve multiple at once
