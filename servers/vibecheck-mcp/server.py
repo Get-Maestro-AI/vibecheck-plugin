@@ -240,19 +240,45 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="vibecheck_resolve",
+            description=(
+                "Resolve a context (issue, spec, etc.) in the VibeCheck dashboard. "
+                "Use this after fixing a blocking issue from /vibecheck:review, or after "
+                "completing a spec. Accepts either the UUID returned by vc-review or the "
+                "ISS-XX label shown on the dashboard. Type-aware: issues are archived, "
+                "specs are marked implemented. Prefer this over vibecheck_dismiss_issue."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": (
+                            "The context ID to resolve. Accepts the UUID from vc-review "
+                            "(e.g. '3f8a...') or the ISS-XX label (e.g. 'ISS-33'). "
+                            "Use the label or UUID exactly as returned — do not guess."
+                        ),
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Brief description of how the issue was resolved",
+                    },
+                },
+                "required": ["id"],
+            },
+        ),
+        types.Tool(
             name="vibecheck_dismiss_issue",
             description=(
-                "Dismiss a specific blocking issue from the VibeCheck dashboard after "
-                "you have fixed it. Call this after successfully resolving an issue "
-                "identified by /vibecheck:review. Keeps the dashboard accurate "
-                "so the developer sees real-time fix progress without re-running the full review."
+                "Deprecated: use vibecheck_resolve instead. "
+                "Dismiss a specific blocking issue from the VibeCheck dashboard."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "issue_id": {
                         "type": "string",
-                        "description": "The full project-prefixed issue ID to dismiss, e.g. 'VC-401', 'VC-402'. Always use the label shown on the issue card, not a bare number.",
+                        "description": "The issue ID (UUID or ISS-XX label) to dismiss.",
                     },
                     "resolution_note": {
                         "type": "string",
@@ -525,7 +551,20 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     global _EVENT_SEQ
     session_id, cwd = _get_session_context()
 
-    # vibecheck_dismiss_issue uses a dedicated endpoint, not the MCPReport path
+    # vibecheck_resolve — type-aware resolution, accepts UUID or ISS-XX label
+    if name == "vibecheck_resolve":
+        ctx_id = arguments.get("id", "")
+        note = arguments.get("note", "")
+        result = post_dismiss_issue(ctx_id, note)
+        dismissed = int(result.get("dismissed", 0) or 0) if isinstance(result, dict) else 0
+        note_suffix = f" ({note})" if note else ""
+        if dismissed > 0:
+            text = f"Resolved {ctx_id} in VibeCheck{note_suffix}."
+        else:
+            text = f"Could not resolve {ctx_id} — no matching active context found{note_suffix}."
+        return [types.TextContent(type="text", text=text)]
+
+    # vibecheck_dismiss_issue — deprecated alias for vibecheck_resolve
     if name == "vibecheck_dismiss_issue":
         issue_id = arguments.get("issue_id", "")
         resolution_note = arguments.get("resolution_note", "")
@@ -592,7 +631,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         for c in contexts:
             status = c.get("status", "")
             preview = c.get("brief_preview", "")[:100]
-            lines.append(f"- [{c['type']}] **{c['title']}** ({status}) id={c['id']}\n  {preview}")
+            label = c.get("label", "")
+            id_str = f"{label} / {c['id']}" if label else c["id"]
+            lines.append(f"- [{c['type']}] **{c['title']}** ({status}) id={id_str}\n  {preview}")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     if name == "vibecheck_get_context":
@@ -641,9 +682,11 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 "link_type": "created_in",
             })
 
+        label = result.get("label", "")
+        id_str = f"{label} / {result.get('id', '')}" if label else result.get("id", "")
         return [types.TextContent(
             type="text",
-            text=f"Context created: [{result.get('type', 'note')}] \"{result.get('title', '')}\" (id={result.get('id', '')})",
+            text=f"Context created: [{result.get('type', 'note')}] \"{result.get('title', '')}\" (id={id_str})",
         )]
 
     if name == "vibecheck_update_context":
