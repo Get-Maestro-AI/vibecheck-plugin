@@ -48,4 +48,4 @@ Write a numbered, step-by-step plan. For each step:
 
 ---
 
-Once the fix is implemented, call `/vibecheck:dismiss-issue $ARGUMENTS` to clear it from the dashboard.
+Once the fix is implemented, call `vibecheck_resolve` with the issue ID to clear it from the dashboard.

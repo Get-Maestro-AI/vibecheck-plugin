@@ -31,7 +31,7 @@ It runs in the background at `http://localhost:8420`. As you work, it automatica
 | `/vibecheck:fix <ID>` | Walk through and fix a flagged issue (e.g. `/vibecheck:fix VC-401`) |
 | `/vibecheck:complete` | Wrap up the current task: review code and mark the objective done |
 | `/vibecheck:create-issue <description>` | Flag a problem so it appears in the dashboard |
-| `/vibecheck:dismiss-issue <ID>` | Clear a resolved issue from the dashboard (e.g. `/vibecheck:dismiss-issue VC-401`) |
+| `/vibecheck:resolve <ID>` | Resolve an issue or context (UUID or ISS-XX label, e.g. `/vibecheck:resolve ISS-33`) |
 | `/vibecheck:update <JSON>` | Post a progress checkpoint to the dashboard |
 | `/vibecheck:contexts [filters]` | Browse contexts in the Context Library (e.g. `/vibecheck:contexts issue open`) |
 | `/vibecheck:context <ID>` | View full detail for a context (e.g. `/vibecheck:context ISS-12`) |
@@ -44,7 +44,7 @@ It runs in the background at `http://localhost:8420`. As you work, it automatica
 
 **Issue IDs**
 
-Every alert is assigned a project-prefixed ID in `PREFIX-N` format — e.g. `VC-401` for a VibeCheck project alert. The prefix is derived from the project name initials (`VibeCheck` → `VC`, `my-project` → `MP`). Always use the full `PREFIX-N` format when passing an ID to `/vibecheck:fix` or `/vibecheck:dismiss-issue`.
+Issues from `/vibecheck:review` are assigned an `ISS-XX` label and also have a UUID. Pass either to `/vibecheck:resolve` or `/vibecheck:fix` — both are accepted.
 
 ---
 
