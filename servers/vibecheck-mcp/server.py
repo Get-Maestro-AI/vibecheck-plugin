@@ -246,7 +246,7 @@ async def list_tools() -> list[types.Tool]:
                 "Use this after fixing a blocking issue from /vibecheck:review, or after "
                 "completing a spec. Accepts either the UUID returned by vc-review or the "
                 "ISS-XX label shown on the dashboard. Type-aware: issues are archived, "
-                "specs are marked implemented. Prefer this over vibecheck_dismiss_issue."
+                "specs are marked implemented."
             ),
             inputSchema={
                 "type": "object",
@@ -265,27 +265,6 @@ async def list_tools() -> list[types.Tool]:
                     },
                 },
                 "required": ["id"],
-            },
-        ),
-        types.Tool(
-            name="vibecheck_dismiss_issue",
-            description=(
-                "Deprecated: use vibecheck_resolve instead. "
-                "Dismiss a specific blocking issue from the VibeCheck dashboard."
-            ),
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "issue_id": {
-                        "type": "string",
-                        "description": "The issue ID (UUID or ISS-XX label) to dismiss.",
-                    },
-                    "resolution_note": {
-                        "type": "string",
-                        "description": "Brief description of how the issue was fixed",
-                    },
-                },
-                "required": ["issue_id"],
             },
         ),
         types.Tool(
@@ -564,20 +543,6 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             text = f"Could not resolve {ctx_id} — no matching active context found{note_suffix}."
         return [types.TextContent(type="text", text=text)]
 
-    # vibecheck_dismiss_issue — deprecated alias for vibecheck_resolve
-    if name == "vibecheck_dismiss_issue":
-        issue_id = arguments.get("issue_id", "")
-        resolution_note = arguments.get("resolution_note", "")
-        result = post_dismiss_issue(issue_id, resolution_note)
-        dismissed = int(result.get("dismissed", 0) or 0) if isinstance(result, dict) else 0
-        note = f" ({resolution_note})" if resolution_note else ""
-        if dismissed > 0:
-            text = f"Issue {issue_id} dismissed from VibeCheck{note}."
-        else:
-            text = (
-                f"Issue {issue_id} was not dismissed (no matching active issue found){note}."
-            )
-        return [types.TextContent(type="text", text=text)]
 
     if name == "vibecheck_begin_completion":
         result = post_begin_completion(
@@ -865,7 +830,6 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             f"Checkpoint reported ({arguments.get('status_label', '')}): "
             f"{arguments.get('summary', '')}"
         ),
-        "vibecheck_dismiss_issue": f"Issue {arguments.get('issue_id', '')} dismissed.",
         "vibecheck_begin_completion": "Completion protocol started.",
         "vibecheck_finalize_objective": "Objective finalize requested.",
     }
