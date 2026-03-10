@@ -431,7 +431,12 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "status": {
                         "type": "string",
-                        "description": "New status",
+                        "description": (
+                            "New status. Valid values depend on context type: "
+                            "issues: open, dispatched, resolved, deferred, archived. "
+                            "Specs/research: draft, shaped, ready, dispatched, implemented, deferred, archived. "
+                            "Decisions/standards: draft, active, archived."
+                        ),
                     },
                     "notes": {
                         "type": "string",
@@ -683,11 +688,16 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             evidence = {}
             if arguments.get("notes"):
                 evidence["notes"] = arguments["notes"]
-            _api_call("POST", f"/api/contexts/{ctx_id}/status", {
+            status_result = _api_call("POST", f"/api/contexts/{ctx_id}/status", {
                 "status": arguments["status"],
                 "source": "explicit",
                 "evidence": evidence if evidence else None,
             })
+            if status_result.get("error"):
+                return [types.TextContent(
+                    type="text",
+                    text=f"Status change failed: {status_result['error']}",
+                )]
 
         # Fetch updated
         result = _api_call("GET", f"/api/contexts/{ctx_id}")

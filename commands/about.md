@@ -33,6 +33,11 @@ It runs in the background at `http://localhost:8420`. As you work, it automatica
 | `/vibecheck:create-issue <description>` | Flag a problem so it appears in the dashboard |
 | `/vibecheck:dismiss-issue <ID>` | Clear a resolved issue from the dashboard (e.g. `/vibecheck:dismiss-issue VC-401`) |
 | `/vibecheck:update <JSON>` | Post a progress checkpoint to the dashboard |
+| `/vibecheck:contexts [filters]` | Browse contexts in the Context Library (e.g. `/vibecheck:contexts issue open`) |
+| `/vibecheck:context <ID>` | View full detail for a context (e.g. `/vibecheck:context ISS-12`) |
+| `/vibecheck:create-context <title>` | Create a new context (note, decision, issue, spec, etc.) |
+| `/vibecheck:shape <ID>` | Start an interactive shaping conversation to develop a context |
+| `/vibecheck:find-related <query>` | Search for semantically related contexts |
 | `/vibecheck:about` | Show this message |
 
 ---
@@ -49,3 +54,12 @@ Every alert is assigned a project-prefixed ID in `PREFIX-N` format — e.g. `VC-
 2. Before committing, run `/vibecheck:review` to catch issues in staged changes.
 3. If issues are found, use `/vibecheck:fix VC-401` to investigate and resolve them.
 4. Once everything looks good, run `/vibecheck:complete` to close out the task.
+
+**Context Library**
+
+The Context Library stores specs, decisions, issues, and notes that persist across sessions.
+
+- `/vibecheck:contexts` — browse what's in the library
+- `/vibecheck:find-related <query>` — search before making a decision (avoids duplicating past work)
+- `/vibecheck:create-context <title>` — capture a new decision, note, or issue
+- `/vibecheck:shape <ID>` — develop a context through interactive Q&A
