@@ -270,22 +270,18 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_begin_completion",
             description=(
-                "Begin objective completion protocol. Call this when work is ready "
-                "for final review. Returns the scoped files list and marks the "
-                "objective as pending protocol completion. Prefer /vibecheck:complete "
-                "as the default completion workflow."
+                "Step 1 of 2 in the completion protocol. Call this when you have "
+                "finished implementing a task and are ready for final review. "
+                "Returns the list of files to review. After reviewing, call "
+                "vibecheck_finalize_objective to close out. "
+                "Note: /vibecheck:complete runs this full workflow automatically."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "objective_id": {
                         "type": "string",
-                        "description": "Optional explicit objective id override",
-                    },
-                    "trigger": {
-                        "type": "string",
-                        "enum": ["manual", "checkpoint_done", "session_end"],
-                        "description": "Why completion protocol is starting",
+                        "description": "Objective ID to complete (omit to use the active objective)",
                     },
                 },
             },
@@ -293,20 +289,20 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_finalize_objective",
             description=(
-                "Finalize objective after completion protocol is complete. "
-                "This is blocked until a review payload has been submitted. "
-                "Prefer /vibecheck:complete for normal completion."
+                "Step 2 of 2 in the completion protocol. Call this after you have "
+                "reviewed the files returned by vibecheck_begin_completion and "
+                "resolved any issues. Marks the objective as complete on the dashboard."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "objective_id": {
                         "type": "string",
-                        "description": "Optional explicit objective id override",
+                        "description": "Objective ID to finalize (omit to use the active objective)",
                     },
                     "checkpoint_summary": {
                         "type": "string",
-                        "description": "Optional short completion summary",
+                        "description": "1-2 sentence summary of what was completed",
                     },
                 },
             },
@@ -454,24 +450,17 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_link_context",
             description=(
-                "Link a Claude Code session to a context. Use this to connect "
-                "the current session to a spec or issue being worked on."
+                "Manually link the current session to a context. Most tools "
+                "(vibecheck_get_context, vibecheck_update_context, vibecheck_implement) "
+                "link automatically — use this only when you need to explicitly record "
+                "that a context is relevant to this session without reading or updating it."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "context_id": {
                         "type": "string",
-                        "description": "Context ID to link",
-                    },
-                    "session_id": {
-                        "type": "string",
-                        "description": "Session ID (defaults to current session)",
-                    },
-                    "link_type": {
-                        "type": "string",
-                        "enum": ["dispatched", "worked_on", "referenced"],
-                        "description": "Type of link (default: worked_on)",
+                        "description": "Context ID (UUID or label, e.g. 'SPEC-4' or 'ISS-12')",
                     },
                 },
                 "required": ["context_id"],
@@ -558,6 +547,19 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         dismissed = int(result.get("dismissed", 0) or 0) if isinstance(result, dict) else 0
         note_suffix = f" ({note})" if note else ""
         if dismissed > 0:
+            # Auto-link: resolving an issue records which session fixed it
+            if session_id and session_id != "unknown":
+                try:
+                    # Resolve label → canonical UUID first (label lookup in GET endpoint)
+                    resolved_ctx = _api_call("GET", f"/api/contexts/{url_quote(ctx_id, safe='')}")
+                    canonical_id = resolved_ctx.get("id") if resolved_ctx and not resolved_ctx.get("error") else None
+                    if canonical_id:
+                        _api_call("POST", f"/api/contexts/{canonical_id}/link-session", {
+                            "session_id": session_id,
+                            "link_type": "issue_resolved",
+                        })
+                except Exception:
+                    pass
             text = f"Resolved {ctx_id} in VibeCheck{note_suffix}."
         else:
             text = f"Could not resolve {ctx_id} — no matching active context found{note_suffix}."
@@ -626,6 +628,17 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         result = _api_call("GET", f"/api/contexts/{ctx_id}")
         if result.get("error") or not result.get("id"):
             return [types.TextContent(type="text", text=f"Context not found: {ctx_id}")]
+
+        # Auto-link: reading a context during a session creates a "read_in" link
+        if session_id and session_id != "unknown":
+            try:
+                _api_call("POST", f"/api/contexts/{result['id']}/link-session", {
+                    "session_id": session_id,
+                    "link_type": "read_in",
+                })
+            except Exception:
+                pass
+
         label = result.get('label')
         lines = [
             f"# {result['title']}",
@@ -662,9 +675,11 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         # Link the new context to the current session
         ctx_id = result.get("id")
         if ctx_id and session_id and session_id != "unknown":
+            # Issues get a distinct link_type so they surface in the Issues section
+            auto_link_type = "issue_created" if arguments.get("type") == "issue" else "created_in"
             _api_call("POST", f"/api/contexts/{ctx_id}/link-session", {
                 "session_id": session_id,
-                "link_type": "created_in",
+                "link_type": auto_link_type,
             })
 
         label = result.get("label", "")
@@ -727,10 +742,21 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                     text=f"Status change failed: {status_result['error']}",
                 )]
 
-        # Fetch updated
+        # Fetch updated — do this first so we have the canonical UUID for the session link
         result = _api_call("GET", f"/api/contexts/{ctx_id}")
         if result.get("error") or not result.get("id"):
             return [types.TextContent(type="text", text=f"Context not found: {ctx_id}")]
+
+        # Auto-link: use result['id'] (canonical UUID) not ctx_id (may be a label like ISS-42)
+        if session_id and session_id != "unknown":
+            try:
+                _api_call("POST", f"/api/contexts/{result['id']}/link-session", {
+                    "session_id": session_id,
+                    "link_type": "worked_on",
+                })
+            except Exception:
+                pass
+
         return [types.TextContent(
             type="text",
             text=f"Context updated: \"{result['title']}\" — status={result['status']}",
@@ -738,15 +764,13 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     if name == "vibecheck_link_context":
         ctx_id = url_quote(arguments.get("context_id", ""), safe="")
-        sid = arguments.get("session_id") or session_id
-        link_type = arguments.get("link_type", "worked_on")
         result = _api_call("POST", f"/api/contexts/{ctx_id}/link-session", {
-            "session_id": sid,
-            "link_type": link_type,
+            "session_id": session_id,
+            "link_type": "worked_on",
         })
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Link failed: {result['error']}")]
-        return [types.TextContent(type="text", text=f"Session {sid} linked to context {ctx_id} ({link_type}).")]
+        return [types.TextContent(type="text", text=f"Session linked to context {ctx_id}.")]
 
     if name == "vibecheck_find_related":
         query = arguments.get("query", "")
@@ -768,6 +792,17 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         result = _api_call("GET", f"/api/contexts/active-set?context_id={ctx_id}")
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Failed to load active context set: {result['error']}")]
+
+        # Auto-link: loading an active context set links the primary context as "read_in"
+        if session_id and session_id != "unknown" and arguments.get("context_id"):
+            try:
+                raw_ctx_id = result.get("work", {}).get("id") or arguments["context_id"]
+                _api_call("POST", f"/api/contexts/{url_quote(raw_ctx_id, safe='')}/link-session", {
+                    "session_id": session_id,
+                    "link_type": "read_in",
+                })
+            except Exception:
+                pass
         lines = ["# Active Context Set\n"]
         work = result.get("work", {})
         if work:
