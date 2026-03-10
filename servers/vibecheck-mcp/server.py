@@ -522,6 +522,26 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["context_id"],
             },
         ),
+        types.Tool(
+            name="vibecheck_implement",
+            description=(
+                "Begin implementing a spec or research context from the Context Library. "
+                "Loads the full active context set (spec brief, related decisions, standing "
+                "standards) and links the current session to the spec as 'dispatched'. "
+                "Call this at the start of implementing a spec. When done, call "
+                "vibecheck_resolve with the spec ID to mark it implemented."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Spec context ID (UUID or label, e.g. 'SPEC-4' or a UUID)",
+                    },
+                },
+                "required": ["id"],
+            },
+        ),
     ]
 
 
@@ -765,6 +785,54 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append("## Standing Standards")
             for s in standards:
                 lines.append(f"### {s['title']}\n{s.get('brief', '')}\n")
+        return [types.TextContent(type="text", text="\n".join(lines))]
+
+    if name == "vibecheck_implement":
+        raw_id = arguments.get("id", "")
+        ctx_id = url_quote(raw_id, safe="")
+        ctx = _api_call("GET", f"/api/contexts/{ctx_id}")
+        if ctx.get("error") or not ctx.get("id"):
+            return [types.TextContent(type="text", text=f"Context not found: {raw_id}")]
+
+        # Link current session as dispatched
+        if session_id and session_id != "unknown":
+            _api_call("POST", f"/api/contexts/{ctx['id']}/link-session", {
+                "session_id": session_id,
+                "link_type": "dispatched",
+            })
+            # Transition status to dispatched if currently ready/shaped
+            if ctx.get("status") in ("ready", "shaped", "draft"):
+                _api_call("POST", f"/api/contexts/{ctx['id']}/status", {
+                    "status": "dispatched",
+                    "source": "explicit",
+                    "evidence": {"notes": "Implementation started via vibecheck_implement"},
+                })
+
+        # Load full active context set
+        active = _api_call("GET", f"/api/contexts/active-set?context_id={ctx_id}")
+
+        label = ctx.get("label", "")
+        resolve_id = label or ctx["id"]
+        heading = f"{label} — {ctx['title']}" if label else ctx["title"]
+        lines = [
+            f"# Implementing: {heading}",
+            f"**Type:** {ctx['type']} | **Status:** {ctx['status']} | **Layer:** {ctx['layer']}",
+            "",
+            f"## Spec Brief\n{ctx.get('brief') or '(no brief — use vibecheck_update_context to add one)'}",
+        ]
+        decisions = (active.get("decisions") or [])
+        if decisions:
+            lines.append("\n## Relevant Past Decisions")
+            for d in decisions:
+                brief = (d.get("brief") or "")[:400]
+                lbl = f" ({d['label']})" if d.get("label") else ""
+                lines.append(f"### {d['title']}{lbl}\n{brief}\n")
+        standards = (active.get("standards") or [])
+        if standards:
+            lines.append("\n## Standing Standards")
+            for s in standards:
+                lines.append(f"### {s['title']}\n{s.get('brief', '')}\n")
+        lines.append(f"\n---\nWhen implementation is complete, call `vibecheck_resolve` with `id=\"{resolve_id}\"` to mark this spec as implemented.")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     # ── Existing tools ────────────────────────────────────────────────────────

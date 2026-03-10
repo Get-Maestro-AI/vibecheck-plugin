@@ -15,7 +15,7 @@ Then respond with the following, adjusting the status line based on the result a
 
 ---
 
-**VibeCheck** is a local dashboard that watches your Claude Code sessions in real time. It tracks what you're working on, flags issues before they ship, and gives you (and anyone else watching) a live window into what Claude is doing across all your projects.
+**VibeCheck** is a local dashboard that watches your Claude Code sessions in real time. It tracks what you're working on, flags issues before they ship, and gives you a live window into what Claude is doing across all your projects.
 
 It runs in the background at `http://localhost:8420`. As you work, it automatically records progress — but you can also talk to it directly using the commands below.
 
@@ -23,43 +23,56 @@ It runs in the background at `http://localhost:8420`. As you work, it automatica
 
 ---
 
-**Commands**
+**Core workflow**
 
 | Command | What it does |
 |---|---|
 | `/vibecheck:review` | Review staged changes for bugs before committing |
-| `/vibecheck:fix <ID>` | Walk through and fix a flagged issue (e.g. `/vibecheck:fix VC-401`) |
-| `/vibecheck:complete` | Wrap up the current task: review code and mark the objective done |
-| `/vibecheck:create-issue <description>` | Flag a problem so it appears in the dashboard |
-| `/vibecheck:resolve <ID>` | Resolve an issue or context (UUID or ISS-XX label, e.g. `/vibecheck:resolve ISS-33`) |
-| `/vibecheck:update <JSON>` | Post a progress checkpoint to the dashboard |
-| `/vibecheck:contexts [filters]` | Browse contexts in the Context Library (e.g. `/vibecheck:contexts issue open`) |
-| `/vibecheck:context <ID>` | View full detail for a context (e.g. `/vibecheck:context ISS-12`) |
-| `/vibecheck:create-context <title>` | Create a new context (note, decision, issue, spec, etc.) |
-| `/vibecheck:shape <ID>` | Start an interactive shaping conversation to develop a context |
-| `/vibecheck:find-related <query>` | Search for semantically related contexts |
-| `/vibecheck:about` | Show this message |
+| `/vibecheck:fix <ID>` | Investigate and fix a flagged issue |
+| `/vibecheck:implement <ID>` | Begin implementing a spec — loads full context before you write a line |
+| `/vibecheck:resolve <ID>` | Close a specific issue or spec mid-session |
+| `/vibecheck:complete` | Wrap up the current session objective and mark it done |
+
+> **`resolve` vs `complete`:** Use `resolve <ID>` when you've fixed one specific issue and want to close it while the session continues. Use `complete` when you're done with the whole task — it closes the session objective.
 
 ---
-
-**Issue IDs**
-
-Issues from `/vibecheck:review` are assigned an `ISS-XX` label and also have a UUID. Pass either to `/vibecheck:resolve` or `/vibecheck:fix` — both are accepted.
-
----
-
-**Typical workflow**
-
-1. Work normally — VibeCheck tracks progress automatically in the background.
-2. Before committing, run `/vibecheck:review` to catch issues in staged changes.
-3. If issues are found, use `/vibecheck:fix VC-401` to investigate and resolve them.
-4. Once everything looks good, run `/vibecheck:complete` to close out the task.
 
 **Context Library**
 
 The Context Library stores specs, decisions, issues, and notes that persist across sessions.
 
-- `/vibecheck:contexts` — browse what's in the library
-- `/vibecheck:find-related <query>` — search before making a decision (avoids duplicating past work)
-- `/vibecheck:create-context <title>` — capture a new decision, note, or issue
-- `/vibecheck:shape <ID>` — develop a context through interactive Q&A
+| Command | What it does |
+|---|---|
+| `/vibecheck:create <title>` | Capture a new note, issue, spec, or decision |
+| `/vibecheck:search <query>` | Find semantically related contexts before making a decision |
+| `/vibecheck:shape <ID>` | Develop a context interactively — great for specs that aren't ready yet |
+| `/vibecheck:contexts [filters]` | Browse everything in the library |
+| `/vibecheck:context <ID>` | View full detail for a specific context |
+
+> **`shape`** is where the magic is. Not sure what to build or how to frame a problem? `/vibecheck:shape` walks you through it before you write a line of code.
+
+**Create syntax:**
+- `/vibecheck:create Add rate limiting` — creates a note
+- `/vibecheck:create spec: Rate limiting for summarizer | Prevent LLM cost overruns` — spec with brief
+- `/vibecheck:create decision: Use PostgreSQL` — decision
+- `/vibecheck:create issue: Auth tokens not invalidated on logout`
+
+---
+
+**Typical workflow**
+
+1. Work normally — VibeCheck tracks progress automatically.
+2. Before committing, run `/vibecheck:review` to catch issues in staged changes.
+3. Fix flagged issues with `/vibecheck:fix <ID>`, then `/vibecheck:resolve <ID>` to close each one.
+4. When the task is done, run `/vibecheck:complete`.
+
+**Spec workflow**
+
+1. Capture the idea: `/vibecheck:create spec: What you want to build`
+2. Develop it: `/vibecheck:shape <ID>`
+3. Build it: `/vibecheck:implement <ID>`
+4. Close it: `/vibecheck:resolve <ID>` (or handled automatically by `/vibecheck:complete`)
+
+---
+
+| `/vibecheck:about` | Show this message |
