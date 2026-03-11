@@ -12,6 +12,7 @@ Uses only stdlib (urllib, json, sys) — no venv required.
 Always exits 0; never blocks Claude Code.
 """
 import json
+import os
 import sys
 import hashlib
 from pathlib import Path
@@ -69,6 +70,42 @@ def main() -> None:
     }
     if waiting_context is not None:
         payload["waiting_context"] = waiting_context
+
+    # Register PPID → session_id on SessionStart (including resume/compact).
+    # Delete on SessionEnd. This lets the MCP server resolve its own session_id
+    # via os.getppid() without relying on CLAUDE_SESSION_ID (not set in MCP envs).
+    event_name = hook_data.get("hook_event_name", "")
+    session_id = hook_data.get("session_id", "")
+    if event_name == "SessionStart" and session_id and session_id != "unknown":
+        try:
+            ppid = os.getppid()
+            cwd = hook_data.get("cwd", "")
+            project_name = hook_data.get("project_name") or (cwd.split("/")[-1] if cwd else "")
+            api_url_ppid = get_api_url()
+            ppid_data = json.dumps({"ppid": ppid, "session_id": session_id, "project_name": project_name}).encode()
+            ppid_req = urllib_request.Request(
+                f"{api_url_ppid}/api/push/session-ppid",
+                data=ppid_data,
+                headers={"Content-Type": "application/json", **auth_headers},
+                method="POST",
+            )
+            with urllib_request.urlopen(ppid_req, timeout=3):
+                pass
+        except Exception as e:
+            log_hook_issue("push_event", f"Failed to register PPID session (ppid={os.getppid()})", e)
+    elif event_name == "SessionEnd" and session_id:
+        try:
+            ppid = os.getppid()
+            api_url_ppid = get_api_url()
+            del_req = urllib_request.Request(
+                f"{api_url_ppid}/api/push/session-ppid/{ppid}",
+                headers={"Content-Type": "application/json", **auth_headers},
+                method="DELETE",
+            )
+            with urllib_request.urlopen(del_req, timeout=3):
+                pass
+        except Exception as e:
+            log_hook_issue("push_event", f"Failed to delete PPID session (ppid={os.getppid()})", e)
 
     try:
         api_url = get_api_url()

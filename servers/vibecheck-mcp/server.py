@@ -173,11 +173,42 @@ def post_mcp_report(report_data: dict) -> None:
         log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/mcp-report", e)
 
 
+def _resolve_session_id() -> str:
+    """Resolve the current session_id via PPID lookup.
+
+    Claude Code spawns MCP servers as direct children (confirmed via empirical
+    test: hook PPID == MCP server PPID == Claude Code PID). The SessionStart
+    hook registers this mapping in the DB; we look it up on every tool call.
+
+    No in-process cache by design: re-reading on every call ensures /clear and
+    /compact (which issue a new session_id) are picked up immediately on the
+    next invocation without any staleness window.
+
+    Fallback chain:
+      1. PPID lookup via /api/session-by-ppid/{ppid}  (preferred, concurrent-safe)
+      2. CLAUDE_SESSION_ID env var                     (may be "unknown" in MCP envs)
+      3. CLAUDE_CODE_SESSION_ID env var                (available in v2.1.49+ on some configs)
+      4. "unknown"
+    """
+    try:
+        ppid = os.getppid()
+        result = _api_call("GET", f"/api/session-by-ppid/{ppid}", timeout=2)
+        resolved = result.get("session_id")
+        if resolved and resolved != "unknown":
+            return resolved
+    except Exception:
+        pass
+    # Fallback: env vars (usually "unknown" in MCP server processes, but try anyway)
+    for env_var in ("CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"):
+        val = os.environ.get(env_var, "")
+        if val and val != "unknown":
+            return val
+    return "unknown"
+
+
 def _get_session_context() -> tuple[str, str]:
-    """Return (session_id, cwd) from Claude Code's hook environment."""
-    session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
-    cwd = os.environ.get("CLAUDE_CWD", os.getcwd())
-    return session_id, cwd
+    """Return (session_id, cwd). session_id via PPID lookup; cwd from env."""
+    return _resolve_session_id(), os.environ.get("CLAUDE_CWD", os.getcwd())
 
 
 # ── MCP Server definition ─────────────────────────────────────────────────────
@@ -320,7 +351,7 @@ async def list_tools() -> list[types.Tool]:
                 "properties": {
                     "type": {
                         "type": "string",
-                        "enum": ["research", "spec", "issue", "decision", "note", "standard"],
+                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill"],
                         "description": "Filter by context type",
                     },
                     "status": {
@@ -341,8 +372,11 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_get_context",
             description=(
-                "Get full detail for a context including its brief, status history, "
-                "linked sessions, and successor contexts."
+                "Get detail for a context. By default returns full content including brief, "
+                "status history, and linked sessions. Set summary_only=True for tier-2 "
+                "progressive reveal: returns title, type, status, and context_summary only "
+                "(no brief). Use summary_only after vibecheck_discover to evaluate a match "
+                "before loading full content."
             ),
             inputSchema={
                 "type": "object",
@@ -350,6 +384,10 @@ async def list_tools() -> list[types.Tool]:
                     "id": {
                         "type": "string",
                         "description": "Context ID",
+                    },
+                    "summary_only": {
+                        "type": "boolean",
+                        "description": "If true, return title + context_summary only (no brief). Default false.",
                     },
                 },
                 "required": ["id"],
@@ -376,7 +414,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "type": {
                         "type": "string",
-                        "enum": ["research", "spec", "issue", "decision", "note", "standard"],
+                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill"],
                         "description": "Context type (default: note)",
                     },
                     "predecessor_id": {
@@ -387,6 +425,15 @@ async def list_tools() -> list[types.Tool]:
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Tags for categorization",
+                    },
+                    "context_summary": {
+                        "type": "string",
+                        "description": "For type=skill: short trigger condition (1-2 sentences). This is what gets embedded for discovery.",
+                    },
+                    "skill_allowed_tools": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "For type=skill: optional list of tool names this skill is allowed to use",
                     },
                 },
                 "required": ["title"],
@@ -512,6 +559,45 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="vibecheck_discover",
+            description=(
+                "Discover relevant contexts (skills, decisions, standards, research) from the "
+                "VibeCheck Context Library using hybrid BM25+vector scoring. Call before "
+                "starting any non-trivial task to surface relevant methodology, prior decisions, "
+                "or research. Returns a ranked list of matches — use vibecheck_get_context with "
+                "summary_only=True to evaluate a match, or vibecheck_get_context to load full "
+                "content. For skills specifically, pass layer='skill'."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What you are currently working on or looking for (1-2 sentences)",
+                    },
+                    "layer": {
+                        "type": "string",
+                        "enum": ["skill", "standard", "decision", "work"],
+                        "description": "Filter by layer. Omit to search all layers.",
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "Filter by context type (skill, decision, standard, research, spec, etc.)",
+                    },
+                    "repo_tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Repo/tech tags to augment query matching",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results to return (default 5)",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
+        types.Tool(
             name="vibecheck_implement",
             description=(
                 "Begin implementing a spec or research context from the Context Library. "
@@ -625,12 +711,14 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     if name == "vibecheck_get_context":
         ctx_id = url_quote(arguments.get("id", ""), safe="")
-        result = _api_call("GET", f"/api/contexts/{ctx_id}")
+        summary_only = arguments.get("summary_only", False)
+        url_suffix = "?summary_only=true" if summary_only else ""
+        result = _api_call("GET", f"/api/contexts/{ctx_id}{url_suffix}")
         if result.get("error") or not result.get("id"):
             return [types.TextContent(type="text", text=f"Context not found: {ctx_id}")]
 
         # Auto-link: reading a context during a session creates a "read_in" link
-        if session_id and session_id != "unknown":
+        if not summary_only and session_id and session_id != "unknown":
             try:
                 _api_call("POST", f"/api/contexts/{result['id']}/link-session", {
                     "session_id": session_id,
@@ -639,20 +727,62 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             except Exception:
                 pass
 
-        label = result.get('label')
+        label = result.get("label")
+        heading = f"{label} — {result['title']}" if label else result["title"]
         lines = [
-            f"# {result['title']}",
-            f"**Type:** {result['type']} | **Status:** {result['status']} | **Layer:** {result['layer']}",
+            f"# {heading}",
+            f"**Type:** {result['type']} | **Status:** {result['status']} | **Layer:** {result.get('layer', '')}",
         ]
-        if label:
-            lines[0] = f"# {label} — {result['title']}"
-        if result.get("predecessor_id"):
-            lines.append(f"**Predecessor:** {result['predecessor_id']}")
-        if result.get("successor_ids"):
-            lines.append(f"**Successors:** {', '.join(result['successor_ids'])}")
         if result.get("tags"):
             lines.append(f"**Tags:** {', '.join(result['tags'])}")
-        lines.append(f"\n## Brief\n{result.get('brief', '(empty)')}")
+
+        if summary_only:
+            summary = result.get("context_summary") or "(no summary yet)"
+            lines.append(f"\n**Summary:** {summary}")
+            lines.append("\n*Use vibecheck_get_context(id) to load the full brief.*")
+        else:
+            if result.get("predecessor_id"):
+                lines.append(f"**Predecessor:** {result['predecessor_id']}")
+            if result.get("successor_ids"):
+                lines.append(f"**Successors:** {', '.join(result['successor_ids'])}")
+            lines.append(f"\n## Brief\n{result.get('brief', '(empty)')}")
+        return [types.TextContent(type="text", text="\n".join(lines))]
+
+    if name == "vibecheck_discover":
+        query = arguments.get("query", "").strip()
+        if not query:
+            return [types.TextContent(type="text", text="Error: query is required.")]
+        layer = arguments.get("layer", "")
+        ctx_type = arguments.get("type", "")
+        repo_tags = arguments.get("repo_tags", [])
+        repo_tags_str = ",".join(repo_tags) if repo_tags else ""
+        limit = arguments.get("limit", 5)
+        params = f"q={url_quote(query)}&limit={limit}"
+        if layer:
+            params += f"&layer={url_quote(layer)}"
+        if ctx_type:
+            params += f"&type={url_quote(ctx_type)}"
+        if repo_tags_str:
+            params += f"&repo_tags={url_quote(repo_tags_str)}"
+        result = _api_call("GET", f"/api/contexts/discover?{params}")
+        if result.get("error"):
+            return [types.TextContent(type="text", text=f"Discovery failed: {result['error']}")]
+        contexts = result.get("contexts", [])
+        if not contexts:
+            label_hint = f" ({layer})" if layer else ""
+            return [types.TextContent(type="text", text=f"No matching contexts{label_hint} found.")]
+        layer_label = f" — {layer}" if layer else ""
+        lines = [f"# Relevant Contexts{layer_label} ({len(contexts)} found)\n"]
+        for c in contexts:
+            label = c.get("label", "")
+            type_str = c.get("type", "")
+            heading = f"{c['title']} ({label})" if label else c["title"]
+            lines.append(f"## {heading} — {type_str}")
+            if c.get("context_summary"):
+                lines.append(f"**Summary:** {c['context_summary']}\n")
+            lines.append("---")
+        lines.append("\nTo evaluate a match: `vibecheck_get_context(id, summary_only=True)`")
+        lines.append("To load full content: `vibecheck_get_context(id)`")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     if name == "vibecheck_create_context":
@@ -668,6 +798,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             payload["predecessor_id"] = arguments["predecessor_id"]
         if arguments.get("tags"):
             payload["tags"] = arguments["tags"]
+        if arguments.get("context_summary"):
+            payload["context_summary"] = arguments["context_summary"]
+        if arguments.get("skill_allowed_tools"):
+            payload["skill_allowed_tools"] = arguments["skill_allowed_tools"]
         result = _api_call("POST", "/api/contexts", payload)
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Failed to create context: {result['error']}")]
@@ -793,16 +927,25 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Failed to load active context set: {result['error']}")]
 
-        # Auto-link: loading an active context set links the primary context as "read_in"
+        # Auto-link: link the work context, all injected standards, and semantic decisions as "read_in"
         if session_id and session_id != "unknown" and arguments.get("context_id"):
-            try:
-                raw_ctx_id = result.get("work", {}).get("id") or arguments["context_id"]
-                _api_call("POST", f"/api/contexts/{url_quote(raw_ctx_id, safe='')}/link-session", {
-                    "session_id": session_id,
-                    "link_type": "read_in",
-                })
-            except Exception:
-                pass
+            ctx_ids_to_link = []
+            raw_work_id = result.get("work", {}).get("id") or arguments["context_id"]
+            ctx_ids_to_link.append(raw_work_id)
+            for s in result.get("standards", []):
+                if s.get("id"):
+                    ctx_ids_to_link.append(s["id"])
+            for d in result.get("decisions", []):
+                if d.get("id"):
+                    ctx_ids_to_link.append(d["id"])
+            for ctx_id_to_link in ctx_ids_to_link:
+                try:
+                    _api_call("POST", f"/api/contexts/{url_quote(ctx_id_to_link, safe='')}/link-session", {
+                        "session_id": session_id,
+                        "link_type": "read_in",
+                    })
+                except Exception:
+                    pass
         lines = ["# Active Context Set\n"]
         work = result.get("work", {})
         if work:
@@ -820,6 +963,15 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append("## Standing Standards")
             for s in standards:
                 lines.append(f"### {s['title']}\n{s.get('brief', '')}\n")
+        skill_lib = result.get("skill_library")
+        if skill_lib:
+            lines.append("## Skill Library")
+            lines.append(
+                f"{skill_lib['count']} active skill(s): {skill_lib['titles']}.\n"
+                "Before starting any non-trivial task, call `vibecheck_discover(query=..., layer=\"skill\")` "
+                "to surface relevant methodology."
+            )
+            lines.append("")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     if name == "vibecheck_implement":
@@ -867,6 +1019,13 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append("\n## Standing Standards")
             for s in standards:
                 lines.append(f"### {s['title']}\n{s.get('brief', '')}\n")
+        skill_lib = active.get("skill_library")
+        if skill_lib:
+            lines.append("\n## Skill Library")
+            lines.append(
+                f"{skill_lib['count']} active skill(s): {skill_lib['titles']}.\n"
+                "Call `vibecheck_discover(query=..., layer=\"skill\")` before starting work."
+            )
         lines.append(f"\n---\nWhen implementation is complete, call `vibecheck_resolve` with `id=\"{resolve_id}\"` to mark this spec as implemented.")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
