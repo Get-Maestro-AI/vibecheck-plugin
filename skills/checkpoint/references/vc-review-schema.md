@@ -1,6 +1,6 @@
 # VcReview Payload Schema
 
-POST to `http://localhost:8420/api/push/vc-review`.
+POST to `<VibeCheck_URL>/api/push/vc-review`. Resolve the URL from the `VIBECHECK_API_URL` environment variable, or `~/.config/vibecheck/config` (`api_url=...` line), falling back to `http://localhost:8420`.
 
 ```json
 {
@@ -75,8 +75,14 @@ Use the `issues` array to present findings to the user and ask if they want spec
 ## Example curl command
 
 ```bash
-curl -s -X POST http://localhost:8420/api/push/vc-review \
+_VC_CONF="$HOME/.config/vibecheck/config"
+_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
+_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
+_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
+_AUTH_ARGS=(); [ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
+curl -s -X POST "$_VC_URL/api/push/vc-review" \
   -H "Content-Type: application/json" \
+  "${_AUTH_ARGS[@]}" \
   -d '<YOUR_JSON_PAYLOAD>'
 ```
 

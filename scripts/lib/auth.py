@@ -8,13 +8,12 @@ by the main HTTP callers (push_event, push_turn, MCP server).
 
 Resolution order for both functions:
   1. VIBECHECK_API_KEY env var
-  2. ~/.config/vibecheck/config.json  {"api_key": "vc_..."}
+  2. ~/.config/vibecheck/config  (key=value, line: api_key=vc_...)
   3. Claim token fallback (anonymous local use, credentials only)
 
 Always returns a dict (never raises).
 For local-only deployments the server accepts events without any auth.
 """
-import json
 import os
 from pathlib import Path
 from lib.claim import get_or_create_claim_token  # type: ignore[import]
@@ -25,13 +24,14 @@ def _resolve_api_key() -> str:
     key = os.environ.get("VIBECHECK_API_KEY", "").strip()
     if key:
         return key
-    config_path = Path.home() / ".config" / "vibecheck" / "config.json"
+    config_path = Path.home() / ".config" / "vibecheck" / "config"
     if config_path.exists():
         try:
-            data = json.loads(config_path.read_text())
-            key = data.get("api_key", "").strip()
-            if key:
-                return key
+            for line in config_path.read_text().splitlines():
+                if line.startswith("api_key="):
+                    key = line.split("=", 1)[1].strip()
+                    if key:
+                        return key
         except Exception:
             pass
     return ""

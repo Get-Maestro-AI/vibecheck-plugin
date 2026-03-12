@@ -21,6 +21,19 @@ import json, os, subprocess, urllib.request, urllib.parse
 cwd = os.getcwd()
 session_id = os.environ.get("CLAUDE_SESSION_ID", "")
 
+vc_url = os.environ.get("VIBECHECK_API_URL", "").strip().rstrip("/")
+if not vc_url:
+    try:
+        with open(os.path.expanduser("~/.config/vibecheck/config")) as _f:
+            for _ln in _f:
+                if _ln.startswith("api_url="):
+                    vc_url = _ln.split("=", 1)[1].strip().rstrip("/")
+                    break
+    except Exception:
+        pass
+if not vc_url:
+    vc_url = "http://localhost:8420"
+
 # ── 1. Fetch objective context from VibeCheck ────────────────────────────────
 obj_files = []
 obj_started_at = ""
@@ -29,7 +42,7 @@ try:
     params = {"cwd": cwd}
     if session_id:
         params["session_id"] = session_id
-    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode(params)
+    url = vc_url + "/api/review-context?" + urllib.parse.urlencode(params)
     resp = urllib.request.urlopen(url, timeout=3)
     ctx = json.loads(resp.read())
     obj_files = ctx.get("objective_files") or []
@@ -99,12 +112,26 @@ import json, os, subprocess, urllib.request, urllib.parse
 
 cwd = os.getcwd()
 session_id = os.environ.get("CLAUDE_SESSION_ID", "")
+
+vc_url = os.environ.get("VIBECHECK_API_URL", "").strip().rstrip("/")
+if not vc_url:
+    try:
+        with open(os.path.expanduser("~/.config/vibecheck/config")) as _f:
+            for _ln in _f:
+                if _ln.startswith("api_url="):
+                    vc_url = _ln.split("=", 1)[1].strip().rstrip("/")
+                    break
+    except Exception:
+        pass
+if not vc_url:
+    vc_url = "http://localhost:8420"
+
 obj_files = []
 try:
     params = {"cwd": cwd}
     if session_id:
         params["session_id"] = session_id
-    url = "http://localhost:8420/api/review-context?" + urllib.parse.urlencode(params)
+    url = vc_url + "/api/review-context?" + urllib.parse.urlencode(params)
     resp = urllib.request.urlopen(url, timeout=3)
     ctx = json.loads(resp.read())
     obj_files = ctx.get("objective_files") or []
@@ -144,7 +171,7 @@ Answer each question honestly based on what actually happened, not what should h
 
 Fetch current review standards from VibeCheck before analyzing. Capture the output — you will need the standard IDs for the `rulesets_active` field in the payload, and the slug values for attributing findings.
 
-!`curl -s --max-time 3 "http://localhost:8420/api/review-context?cwd=$(pwd)" \
+!`_VC_CONF="$HOME/.config/vibecheck/config"; _VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"; _VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"; curl -s --max-time 3 "$_VC_URL/api/review-context?cwd=$(pwd)" \
   | python3 -c "
 import json, sys
 try:
@@ -241,9 +268,9 @@ This review has two passes. You MUST evaluate every active standard individually
 Build the JSON payload with your actual findings, then run this curl command:
 
 ```bash
-_VC_CONF="$HOME/.config/vibecheck/config.json"
-_VC_KEY="${VIBECHECK_API_KEY:-$(sed -n 's/.*"api_key"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
-_VC_URL="${VIBECHECK_API_URL:-$(sed -n 's/.*"api_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_VC_CONF" 2>/dev/null)}"
+_VC_CONF="$HOME/.config/vibecheck/config"
+_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
+_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
 _VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
 _AUTH_ARGS=()
 [ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")

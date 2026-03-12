@@ -40,7 +40,18 @@ try:
     from lib.hook_log import log_hook_issue  # type: ignore[import]
 except ImportError:
     def get_api_url() -> str:
-        return os.environ.get("VIBECHECK_API_URL", "http://localhost:8420")
+        url = os.environ.get("VIBECHECK_API_URL", "").strip().rstrip("/")
+        if not url:
+            try:
+                cfg = os.path.expanduser("~/.config/vibecheck/config")
+                with open(cfg) as _f:
+                    for _ln in _f:
+                        if _ln.startswith("api_url="):
+                            url = _ln.split("=", 1)[1].strip().rstrip("/")
+                            break
+            except Exception:
+                pass
+        return url or "http://localhost:8420"
     def resolve_auth_headers() -> dict:
         return {}
     def log_hook_issue(script: str, message: str, exc: Exception | None = None) -> None:

@@ -8,7 +8,7 @@ Tell the user about VibeCheck and its available commands.
 Check whether the VibeCheck dashboard is currently reachable:
 
 ```bash
-curl -s --max-time 2 http://localhost:8420/api/status 2>/dev/null && echo "REACHABLE" || echo "UNREACHABLE"
+_VC_CONF="$HOME/.config/vibecheck/config"; _VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"; _VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"; curl -s --max-time 2 "$_VC_URL/api/status" 2>/dev/null && echo "REACHABLE" || echo "UNREACHABLE"
 ```
 
 Then respond with the following, adjusting the status line based on the result above:
@@ -17,7 +17,7 @@ Then respond with the following, adjusting the status line based on the result a
 
 **VibeCheck** is a local dashboard that watches your Claude Code sessions in real time. It tracks what you're working on, flags issues before they ship, and gives you a live window into what Claude is doing across all your projects.
 
-It runs in the background at `http://localhost:8420`. As you work, it automatically records progress — but you can also talk to it directly using the commands below.
+It connects to your configured VibeCheck server (default: `http://localhost:8420`; set `api_url=...` in `~/.config/vibecheck/config` to point to a different server). As you work, it automatically records progress — but you can also talk to it directly using the commands below.
 
 **Dashboard status:** (reachable / not running — start it with `python -m vibecheck`)
 

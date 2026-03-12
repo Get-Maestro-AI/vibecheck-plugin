@@ -6,7 +6,9 @@
 
 set -euo pipefail
 
-VIBECHECK_URL="${VIBECHECK_URL:-http://localhost:8420}"
+_VC_CONF="$HOME/.config/vibecheck/config"
+VIBECHECK_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2- || true)}"
+VIBECHECK_URL="${VIBECHECK_URL%/}"; VIBECHECK_URL="${VIBECHECK_URL:-http://localhost:8420}"
 PROJECT_NAME="$(basename "$(pwd)")"
 
 # Fetch the briefing with a 3-second timeout. If the server is unreachable, exit silently.

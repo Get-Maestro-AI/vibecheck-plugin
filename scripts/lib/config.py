@@ -2,10 +2,9 @@
 
 Resolution order for VIBECHECK_API_URL:
   1. VIBECHECK_API_URL environment variable
-  2. ~/.config/vibecheck/config.json  {"api_url": "..."}
+  2. ~/.config/vibecheck/config  (key=value, line: api_url=https://...)
   3. Default: http://localhost:8420
 """
-import json
 import os
 from pathlib import Path
 
@@ -16,13 +15,14 @@ def get_api_url() -> str:
     if env:
         return env.rstrip("/")
 
-    config_path = Path.home() / ".config" / "vibecheck" / "config.json"
+    config_path = Path.home() / ".config" / "vibecheck" / "config"
     if config_path.exists():
         try:
-            data = json.loads(config_path.read_text())
-            url = data.get("api_url", "").strip()
-            if url:
-                return url.rstrip("/")
+            for line in config_path.read_text().splitlines():
+                if line.startswith("api_url="):
+                    url = line.split("=", 1)[1].strip()
+                    if url:
+                        return url.rstrip("/")
         except Exception:
             pass
 
