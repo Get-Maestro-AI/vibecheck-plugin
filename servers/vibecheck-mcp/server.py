@@ -167,8 +167,8 @@ def _api_call(method: str, path: str, payload: dict | None = None, timeout: int 
         return {"error": str(e)}
 
 
-def post_mcp_report(report_data: dict) -> None:
-    """POST an MCPReport to the VibeCheck server (fire and forget)."""
+def post_mcp_report(report_data: dict) -> dict:
+    """POST an MCPReport to the VibeCheck server. Returns parsed response dict."""
     try:
         api_url = get_api_url()
         data = json.dumps(report_data, default=str).encode()
@@ -178,10 +178,12 @@ def post_mcp_report(report_data: dict) -> None:
             headers={"Content-Type": "application/json", **resolve_auth_headers()},
             method="POST",
         )
-        with urllib_request.urlopen(req, timeout=5):
-            pass
+        with urllib_request.urlopen(req, timeout=5) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+            return json.loads(body) if body else {"ok": True}
     except (URLError, OSError, Exception) as e:
         log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/mcp-report", e)
+        return {"error": str(e)}
 
 
 def _resolve_session_id() -> str:
@@ -240,7 +242,11 @@ async def list_tools() -> list[types.Tool]:
                 "(planning → implementing → debugging → reviewing), and when you are "
                 "about to stop responding. Set status_label to match your actual phase "
                 "and include a 1-2 sentence summary of what changed. This is your "
-                "primary reporting tool — use it continuously, not just at the end."
+                "primary reporting tool — use it continuously, not just at the end. "
+                "If this step involved a non-obvious choice — one that a future engineer "
+                "couldn't reconstruct from the code alone — set decision_signal.decided "
+                "to a brief description of what was chosen, and decision_signal.why to "
+                "the reasoning if you have it. Keep it short; the server will enrich it."
             ),
             inputSchema={
                 "type": "object",
@@ -276,6 +282,26 @@ async def list_tools() -> list[types.Tool]:
                     "next_step": {
                         "type": "string",
                         "description": "What you plan to do next",
+                    },
+                    "decision_signal": {
+                        "type": "object",
+                        "description": (
+                            "Set when this checkpoint involved a non-obvious choice that "
+                            "a future engineer couldn't reconstruct from the code alone. "
+                            "Ask yourself: would someone else possibly need to know this "
+                            "to do future work? If yes, capture it here."
+                        ),
+                        "properties": {
+                            "decided": {
+                                "type": "string",
+                                "description": "One sentence: what was chosen",
+                            },
+                            "why": {
+                                "type": "string",
+                                "description": "Brief reasoning (optional — server will enrich)",
+                            },
+                        },
+                        "required": ["decided"],
                     },
                 },
                 "required": ["status_label", "summary"],
@@ -483,6 +509,15 @@ async def list_tools() -> list[types.Tool]:
                     "always_inject": {
                         "type": "boolean",
                         "description": "Update the always-inject flag (standard-layer contexts only)",
+                    },
+                    "context_summary": {
+                        "type": "string",
+                        "description": (
+                            "For skill-type contexts: the situational trigger condition — "
+                            "describe WHEN this cognitive mode should activate (work phase, "
+                            "what the agent has just done, the specific signal). "
+                            "For other types: a one-sentence knowledge summary for embedding."
+                        ),
                     },
                     "source_snapshot": {
                         "type": "object",
@@ -767,7 +802,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         ctx_type = arguments.get("type", "")
         repo_tags = arguments.get("repo_tags", [])
         repo_tags_str = ",".join(repo_tags) if repo_tags else ""
-        limit = arguments.get("limit", 5)
+        # Layer-specific default limits: skills max 2, decisions max 5
+        _layer_limits = {"skill": 2, "decision": 5}
+        requested_limit = arguments.get("limit", _layer_limits.get(layer, 5))
+        limit = min(int(requested_limit), _layer_limits.get(layer, 20))
         params = f"q={url_quote(query)}&limit={limit}"
         if layer:
             params += f"&layer={url_quote(layer)}"
@@ -775,25 +813,52 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             params += f"&type={url_quote(ctx_type)}"
         if repo_tags_str:
             params += f"&repo_tags={url_quote(repo_tags_str)}"
+        # Pass session_id for context-enriched scoring and why_now generation
+        if session_id and session_id != "unknown":
+            params += f"&session_id={url_quote(session_id)}"
         result = _api_call("GET", f"/api/contexts/discover?{params}")
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Discovery failed: {result['error']}")]
         contexts = result.get("contexts", [])
+        situation_read = result.get("situation_read")
+        excluded_count = result.get("excluded_count", 0)
+        session_enriched = result.get("session_enriched", False)
         if not contexts:
-            label_hint = f" ({layer})" if layer else ""
-            return [types.TextContent(type="text", text=f"No matching contexts{label_hint} found.")]
-        layer_label = f" — {layer}" if layer else ""
-        lines = [f"# Relevant Contexts{layer_label} ({len(contexts)} found)\n"]
+            lines = ["**No high-confidence contexts found.**"]
+            if situation_read:
+                lines.append(f"\n*Situation: {situation_read}*")
+            if excluded_count:
+                lines.append(f"*{excluded_count} previously-loaded context(s) filtered out (already in your context window).*")
+            lines.append("\nBroaden your query or call without a layer filter to search all layers.")
+            return [types.TextContent(type="text", text="\n".join(lines))]
+        # Build response header
+        lines = []
+        if situation_read and session_enriched:
+            lines.append(f"## What applies to your situation\n")
+            lines.append(f"*{situation_read}*\n")
+            if excluded_count:
+                lines.append(f"*({excluded_count} previously-loaded context(s) filtered out — already in your context window.)*\n")
+        else:
+            layer_label = f" [{layer}]" if layer else ""
+            lines.append(f"## Relevant Contexts{layer_label}\n")
+        # Format each result
         for c in contexts:
             label = c.get("label", "")
+            layer_str = c.get("layer", "")
             type_str = c.get("type", "")
             heading = f"{c['title']} ({label})" if label else c["title"]
-            lines.append(f"## {heading} — {type_str}")
+            layer_tag = f"[{layer_str}] " if layer_str and not layer else ""
+            lines.append(f"### {layer_tag}{heading}")
             if c.get("context_summary"):
-                lines.append(f"**Summary:** {c['context_summary']}\n")
-            lines.append("---")
-        lines.append("\nTo evaluate a match: `vibecheck_get_context(id, summary_only=True)`")
-        lines.append("To load full content: `vibecheck_get_context(id)`")
+                lines.append(f"> {c['context_summary']}\n")
+            if c.get("why_now"):
+                lines.append(f"**Why now:** {c['why_now']}")
+            if type_str == "skill":
+                lines.append(f"*Activate with: `vibecheck_get_context(\"{c.get('id', label)}\")` then follow the brief.*")
+            lines.append("")
+        # Single CTA
+        lines.append("---")
+        lines.append("Evaluate a match: `vibecheck_get_context(id, summary_only=True)` · Load full brief: `vibecheck_get_context(id)`")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     if name == "vibecheck_create_context":
@@ -852,6 +917,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             patch["tags"] = arguments["tags"]
         if "always_inject" in arguments:
             patch["always_inject"] = arguments["always_inject"]
+        if arguments.get("context_summary") is not None:
+            patch["context_summary"] = arguments["context_summary"]
         if "source_snapshot" in arguments:
             patch["source_snapshot"] = arguments["source_snapshot"]
 
@@ -1072,7 +1139,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     }
     _EVENT_SEQ += 1
 
-    post_mcp_report(report)
+    mcp_result = post_mcp_report(report)
 
     # Enforce completion handshake on done checkpoint updates: attempt finalize
     # and return a blocked message when protocol review has not completed yet.
@@ -1107,6 +1174,35 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         "vibecheck_finalize_objective": "Objective finalize requested.",
     }
     msg = ack_messages.get(name, "Reported to VibeCheck.")
+
+    # Surface ambient context suggestion if VibeCheck detected one
+    if name == "vibecheck_update" and isinstance(mcp_result, dict):
+        # Decision logged inline — tell the developer
+        logged = mcp_result.get("logged_decision")
+        if logged and logged.get("label"):
+            label = logged["label"]
+            title = logged.get("title", "")
+            lines = [msg, f"\nLogged to Context Library: **{title}** ({label})"]
+            lines.append(f"*Tell the developer: \"I documented this decision as {label} in VibeCheck.\"*")
+            msg = "\n".join(lines)
+
+        # Ambient context suggestion
+        suggestion = mcp_result.get("suggested_context")
+        if suggestion and suggestion.get("title"):
+            ctx_id = suggestion.get("label") or suggestion.get("id", "")
+            lines = [
+                msg,
+                f"\nVibeCheck surfaced a relevant {suggestion.get('layer', 'context')}: "
+                f"{suggestion['title']} ({ctx_id})",
+            ]
+            if suggestion.get("context_summary"):
+                lines.append(f"> {suggestion['context_summary']}")
+            if suggestion.get("why_now"):
+                lines.append(f"Why now: {suggestion['why_now']}")
+            if ctx_id:
+                lines.append(f'Load with: vibecheck_get_context("{ctx_id}")')
+            msg = "\n".join(lines)
+
     return [types.TextContent(type="text", text=msg)]
 
 
