@@ -35,23 +35,28 @@ _SCRIPTS_DIR = str(Path(__file__).parent.parent.parent / "scripts")
 sys.path.insert(0, _SCRIPTS_DIR)
 
 try:
-    from lib.config import get_api_url  # type: ignore[import]
+    from lib.config import get_api_url, get_frontend_url  # type: ignore[import]
     from lib.auth import resolve_auth_headers  # type: ignore[import]
     from lib.hook_log import log_hook_issue  # type: ignore[import]
 except ImportError:
+    def _read_vibecheck_config(key: str) -> str:
+        try:
+            cfg = os.path.expanduser("~/.config/vibecheck/config")
+            with open(cfg) as _f:
+                for _ln in _f:
+                    if _ln.startswith(f"{key}="):
+                        return _ln.split("=", 1)[1].strip().rstrip("/")
+        except Exception:
+            pass
+        return ""
+
     def get_api_url() -> str:
         url = os.environ.get("VIBECHECK_API_URL", "").strip().rstrip("/")
-        if not url:
-            try:
-                cfg = os.path.expanduser("~/.config/vibecheck/config")
-                with open(cfg) as _f:
-                    for _ln in _f:
-                        if _ln.startswith("api_url="):
-                            url = _ln.split("=", 1)[1].strip().rstrip("/")
-                            break
-            except Exception:
-                pass
-        return url or "http://localhost:8420"
+        return url or _read_vibecheck_config("api_url") or "http://localhost:8420"
+
+    def get_frontend_url() -> str:
+        url = os.environ.get("VIBECHECK_FRONTEND_URL", "").strip().rstrip("/")
+        return url or _read_vibecheck_config("frontend_url") or "http://localhost:5173"
     def resolve_auth_headers() -> dict:
         return {}
     def log_hook_issue(script: str, message: str, exc: Exception | None = None) -> None:
@@ -1182,7 +1187,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         if logged and logged.get("label"):
             label = logged["label"]
             title = logged.get("title", "")
+            url = f"{get_frontend_url()}/#context/{label}"
             lines = [msg, f"\nLogged to Context Library: **{title}** ({label})"]
+            lines.append(f"View: {url}")
             lines.append(f"*Tell the developer: \"I documented this decision as {label} in VibeCheck.\"*")
             msg = "\n".join(lines)
 
