@@ -362,7 +362,7 @@ async def list_tools() -> list[types.Tool]:
                 "properties": {
                     "type": {
                         "type": "string",
-                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill"],
+                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona"],
                         "description": "Filter by context type",
                     },
                     "status": {
@@ -425,7 +425,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "type": {
                         "type": "string",
-                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill"],
+                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona"],
                         "description": "Context type (default: note)",
                     },
                     "predecessor_id": {
