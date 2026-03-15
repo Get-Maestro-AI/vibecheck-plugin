@@ -384,9 +384,10 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_list_contexts",
             description=(
-                "List contexts from the VibeCheck Context Library. "
-                "Returns id, title, type, status, and brief preview for each context. "
-                "Use this to find specs to implement, issues to fix, or decisions to reference."
+                "List contexts from the VibeCheck Context Library. Returns id, title, type, status, and brief preview for each context. "
+                "Use this to find specs to implement, issues to fix, or decisions to reference. "
+                "By default returns all statuses except archived — draft, active, implemented, resolved, and open contexts are all visible. "
+                "Pass status= to filter to a specific status."
             ),
             inputSchema={
                 "type": "object",
