@@ -991,7 +991,12 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
         # Apply field updates
         if patch:
-            _api_call("PATCH", f"/api/contexts/{ctx_id}", patch)
+            patch_result = _api_call("PATCH", f"/api/contexts/{ctx_id}", patch)
+            if patch_result.get("error"):
+                return [types.TextContent(
+                    type="text",
+                    text=f"Failed to update context: {patch_result['error']}",
+                )]
 
         # Handle status change (separate endpoint with state machine)
         if arguments.get("status"):
