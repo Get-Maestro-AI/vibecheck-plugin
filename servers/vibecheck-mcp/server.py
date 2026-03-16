@@ -798,6 +798,33 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             if result.get("successor_ids"):
                 lines.append(f"**Successors:** {', '.join(result['successor_ids'])}")
             lines.append(f"\n## Brief\n{result.get('brief', '(empty)')}")
+
+            # Session evidence section
+            se = result.get("session_evidence")
+            if se is not None:
+                sess_list = se.get("sessions", [])
+                lookback = se.get("lookback_days", 30)
+                if sess_list:
+                    lines.append(f"\n## Session Evidence")
+                    gold_silver = [s for s in sess_list if s.get("match_tier") in ("gold", "silver")]
+                    bronze = [s for s in sess_list if s.get("match_tier") == "bronze"]
+                    if gold_silver:
+                        lines.append("**Verified connections:**")
+                        for s in gold_silver:
+                            note = f" ⚠ {s['evidence_note']}" if s.get("evidence_note") else ""
+                            via = s.get("match_via") or []
+                            via_str = f" ↳ Linked via [{', '.join(via)}]" if via else " ↳ Linked"
+                            title = s.get("objective_title") or s.get("session_id", "")
+                            lines.append(f"- {title}{note}{via_str}")
+                    if bronze:
+                        lines.append("**Related:**")
+                        for s in bronze:
+                            note = f" ⚠ {s['evidence_note']}" if s.get("evidence_note") else ""
+                            title = s.get("objective_title") or s.get("session_id", "")
+                            lines.append(f"- {title}{note}")
+                else:
+                    lines.append(f"\n*0 sessions touched this in the last {lookback} days.*")
+
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     if name == "vibecheck_discover":
@@ -862,6 +889,28 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             if type_str == "skill":
                 lines.append(f"*Activate with: `vibecheck_get_context(\"{c.get('id', label)}\")` then follow the brief.*")
             lines.append("")
+        # Session history section
+        session_matches = result.get("session_matches", [])
+        if session_matches:
+            lines.append("## Session History")
+            verified = [s for s in session_matches if s.get("match_tier") in ("gold", "silver")]
+            related = [s for s in session_matches if s.get("match_tier") == "bronze"]
+            if verified:
+                lines.append("**Verified connections:**")
+                for s in verified:
+                    note = f" ⚠ {s['evidence_note']}" if s.get("evidence_note") else ""
+                    via = s.get("match_via") or []
+                    via_str = f" ↳ Linked via [{', '.join(str(v) for v in via)}]" if via else ""
+                    title = s.get("objective_title") or s.get("session_id", "")
+                    lines.append(f"- {title}{note}{via_str}")
+            if related:
+                lines.append("**Related:**")
+                for s in related:
+                    note = f" ⚠ {s['evidence_note']}" if s.get("evidence_note") else ""
+                    title = s.get("objective_title") or s.get("session_id", "")
+                    lines.append(f"- {title}{note}")
+            lines.append("")
+
         # Single CTA
         lines.append("---")
         lines.append("Evaluate a match: `vibecheck_get_context(id, summary_only=True)` · Load full brief: `vibecheck_get_context(id)`")
@@ -994,15 +1043,36 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         query = arguments.get("query", "")
         layer = arguments.get("layer", "decision")
         limit = arguments.get("limit", 5)
-        result = _api_call("GET", f"/api/contexts/related?q={url_quote(query)}&layer={layer}&limit={limit}")
+        result = _api_call("GET", f"/api/contexts/related?q={url_quote(query)}&layer={layer}&limit={limit}&include_counts=true")
         related = result.get("related", [])
         if not related:
             return [types.TextContent(type="text", text="No related contexts found.")]
+
+        # Auto-link top result if high confidence
+        if (
+            len(related) > 0
+            and related[0].get("similarity", 0) >= 0.80
+            and session_id
+            and session_id != "unknown"
+        ):
+            try:
+                top_id = related[0].get("id")
+                if top_id:
+                    _api_call("POST", f"/api/contexts/{url_quote(top_id, safe='')}/link-session", {
+                        "session_id": session_id,
+                        "link_type": "read_in",
+                    })
+            except Exception:
+                pass
+
         lines = []
         for r in related:
             sim = r.get("similarity", 0)
             brief = (r.get("brief", "") or "")[:200]
-            lines.append(f"- [{r['type']}] **{r['title']}** (similarity={sim:.2f}) id={r['id']}\n  {brief}")
+            count_str = ""
+            if r.get("linked_session_count") is not None:
+                count_str = f" · {r['linked_session_count']} session(s)"
+            lines.append(f"- [{r['type']}] **{r['title']}** (similarity={sim:.2f}{count_str}) id={r['id']}\n  {brief}")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     if name == "vibecheck_get_active_context_set":
