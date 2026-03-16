@@ -108,7 +108,7 @@ def main() -> None:
     try:
         api_url = get_api_url()
 
-        qs: dict = {"q": query, "limit": _MAX_RESULTS}
+        qs: dict = {"q": query, "situation": query, "limit": _MAX_RESULTS}
         if session_id and session_id != "unknown":
             qs["session_id"] = session_id
 
@@ -126,26 +126,7 @@ def main() -> None:
     if not contexts:
         sys.exit(0)
 
-    # Deduplicate by id AND title — guard against discover returning dupes
-    # with different IDs but identical titles.
-    seen_ids: set[str] = set()
-    seen_titles: set[str] = set()
-    unique: list[dict] = []
-    for c in contexts:
-        ctx_id = c.get("id") or ""
-        title = (c.get("title") or "").strip().lower()
-        if (ctx_id and ctx_id in seen_ids) or (title and title in seen_titles):
-            continue
-        if ctx_id:
-            seen_ids.add(ctx_id)
-        if title:
-            seen_titles.add(title)
-        unique.append(c)
-
-    if not unique:
-        sys.exit(0)
-
-    print(_format_brief(unique))
+    print(_format_brief(contexts))
 
 
 if __name__ == "__main__":
