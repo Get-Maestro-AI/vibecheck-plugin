@@ -641,6 +641,10 @@ async def list_tools() -> list[types.Tool]:
                         "items": {"type": "string"},
                         "description": "Repo/tech tags to augment query matching",
                     },
+                    "situation": {
+                        "type": "string",
+                        "description": "What you are currently doing in 1-2 sentences — the specific problem or moment. Used to sharpen relevance matching independently of session_id resolution. Example: 'Debugging a race condition in the coverage aggregator after a server restart.'",
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Max results to return (default 5)",
@@ -833,6 +837,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return [types.TextContent(type="text", text="Error: query is required.")]
         layer = arguments.get("layer", "")
         ctx_type = arguments.get("type", "")
+        situation = (arguments.get("situation") or "").strip()
         repo_tags = arguments.get("repo_tags", [])
         repo_tags_str = ",".join(repo_tags) if repo_tags else ""
         # Layer-specific default limits: skills max 2, decisions max 5
@@ -849,6 +854,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         # Pass session_id for context-enriched scoring and why_now generation
         if session_id and session_id != "unknown":
             params += f"&session_id={url_quote(session_id)}"
+        # Pass explicit situation to sharpen matching (works even without session_id)
+        if situation:
+            params += f"&situation={url_quote(situation)}"
         result = _api_call("GET", f"/api/contexts/discover?{params}")
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Discovery failed: {result['error']}")]
