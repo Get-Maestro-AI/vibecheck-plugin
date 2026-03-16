@@ -957,10 +957,20 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
         label = result.get("label", "")
         id_str = f"{label} / {result.get('id', '')}" if label else result.get("id", "")
-        return [types.TextContent(
-            type="text",
-            text=f"Context created: [{result.get('type', 'note')}] \"{result.get('title', '')}\" (id={id_str})",
-        )]
+        ctx_type = result.get("type", "note")
+        title = result.get("title", "")
+
+        if ctx_type == "decision" and label:
+            url = f"{get_frontend_url()}/#context/{label}"
+            text = (
+                f"Decision logged to Context Library: \"{title}\" ({label})\n"
+                f"View: {url}\n"
+                f"*Tell the developer: \"I documented this decision as {label} in VibeCheck.\"*"
+            )
+        else:
+            text = f"Context created: [{ctx_type}] \"{title}\" (id={id_str})"
+
+        return [types.TextContent(type="text", text=text)]
 
     if name == "vibecheck_update_context":
         ctx_id = url_quote(arguments.get("id", ""), safe="")
@@ -1276,6 +1286,22 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append(f"View: {url}")
             lines.append(f"*Tell the developer: \"I documented this decision as {label} in VibeCheck.\"*")
             msg = "\n".join(lines)
+
+        # Server-initiated context notifications (auto-mined decisions, Phase 2: issues, etc.)
+        pending = mcp_result.get("pending_notifications") or []
+        for notif in pending:
+            notif_label = notif.get("label", "")
+            notif_title = notif.get("title", "")
+            notif_type = notif.get("ctx_type", "context")
+            if notif_label and notif_title:
+                notif_url = f"{get_frontend_url()}/#context/{notif_label}"
+                lines = [
+                    msg,
+                    f"\nAuto-logged to Context Library: **{notif_title}** ({notif_label}) [{notif_type}]",
+                    f"View: {notif_url}",
+                    f"*Tell the developer: \"VibeCheck auto-logged a {notif_type} as {notif_label}.\"*",
+                ]
+                msg = "\n".join(lines)
 
         # Ambient context suggestion
         suggestion = mcp_result.get("suggested_context")
