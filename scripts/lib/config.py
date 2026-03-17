@@ -48,3 +48,27 @@ def get_frontend_url() -> str:
     if val:
         return val.rstrip("/")
     return "http://localhost:5173"
+
+
+def get_api_targets() -> list[str]:
+    """Return all configured API target URLs (primary + extras), deduplicated.
+
+    Primary URL is always index 1 (existing VIBECHECK_API_URL / api_url).
+    Extra targets are numbered from 2 upward: VIBECHECK_API_URL_2 / api_url_2, etc.
+    Stops at the first missing index (no gaps allowed).
+    """
+    primary = get_api_url()
+    targets: list[str] = [primary]
+    for n in range(2, 10):
+        env_val = os.environ.get(f"VIBECHECK_API_URL_{n}", "").strip()
+        if env_val:
+            url = env_val.rstrip("/")
+        else:
+            cfg_val = _read_config_value(f"api_url_{n}")
+            if cfg_val:
+                url = cfg_val.rstrip("/")
+            else:
+                break  # Stop at first missing index
+        if url and url not in targets:
+            targets.append(url)
+    return targets

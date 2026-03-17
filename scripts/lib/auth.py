@@ -49,6 +49,33 @@ def resolve_auth_headers() -> dict:
     return {}
 
 
+def get_auth_headers_for_index(n: int) -> dict:
+    """Return auth headers for the nth configured target (1-indexed).
+
+    n=1 uses the primary key (VIBECHECK_API_KEY / api_key).
+    n>=2 checks VIBECHECK_API_KEY_N env then api_key_N config value.
+    Returns {"Authorization": "Bearer <key>"} or {} if no key found.
+    """
+    if n == 1:
+        key = _resolve_api_key()
+    else:
+        key = os.environ.get(f"VIBECHECK_API_KEY_{n}", "").strip()
+        if not key:
+            config_path = Path.home() / ".config" / "vibecheck" / "config"
+            if config_path.exists():
+                try:
+                    for line in config_path.read_text().splitlines():
+                        if line.startswith(f"api_key_{n}="):
+                            key = line.split("=", 1)[1].strip()
+                            if key:
+                                break
+                except Exception:
+                    pass
+    if key:
+        return {"Authorization": f"Bearer {key}"}
+    return {}
+
+
 def resolve_credentials() -> dict:
     """Return a dict of auth fields to merge into event payloads (legacy).
 

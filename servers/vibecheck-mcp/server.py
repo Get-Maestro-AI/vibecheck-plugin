@@ -35,8 +35,8 @@ _SCRIPTS_DIR = str(Path(__file__).parent.parent.parent / "scripts")
 sys.path.insert(0, _SCRIPTS_DIR)
 
 try:
-    from lib.config import get_api_url, get_frontend_url  # type: ignore[import]
-    from lib.auth import resolve_auth_headers  # type: ignore[import]
+    from lib.config import get_api_url, get_frontend_url, get_api_targets  # type: ignore[import]
+    from lib.auth import resolve_auth_headers, get_auth_headers_for_index  # type: ignore[import]
     from lib.hook_log import log_hook_issue  # type: ignore[import]
 except ImportError:
     def _read_vibecheck_config(key: str) -> str:
@@ -54,11 +54,39 @@ except ImportError:
         url = os.environ.get("VIBECHECK_API_URL", "").strip().rstrip("/")
         return url or _read_vibecheck_config("api_url") or "http://localhost:8420"
 
+    def get_api_targets() -> list:
+        primary = get_api_url()
+        targets = [primary]
+        for n in range(2, 10):
+            env_val = os.environ.get(f"VIBECHECK_API_URL_{n}", "").strip().rstrip("/")
+            if env_val:
+                url = env_val
+            else:
+                url = _read_vibecheck_config(f"api_url_{n}")
+                if not url:
+                    break
+            if url and url not in targets:
+                targets.append(url)
+        return targets
+
     def get_frontend_url() -> str:
         url = os.environ.get("VIBECHECK_FRONTEND_URL", "").strip().rstrip("/")
         return url or _read_vibecheck_config("frontend_url") or "http://localhost:5173"
+
     def resolve_auth_headers() -> dict:
         return {}
+
+    def get_auth_headers_for_index(n: int) -> dict:
+        if n == 1:
+            key = os.environ.get("VIBECHECK_API_KEY", "").strip()
+            if not key:
+                key = _read_vibecheck_config("api_key")
+        else:
+            key = os.environ.get(f"VIBECHECK_API_KEY_{n}", "").strip()
+            if not key:
+                key = _read_vibecheck_config(f"api_key_{n}")
+        return {"Authorization": f"Bearer {key}"} if key else {}
+
     def log_hook_issue(script: str, message: str, exc: Exception | None = None) -> None:
         try:
             note = f"[{script}] {message}"
@@ -69,91 +97,92 @@ except ImportError:
             return
 
 
+def _post_to_targets(path: str, payload: dict, timeout: int = 5) -> dict:
+    """POST payload to all configured targets. Returns primary response."""
+    targets = get_api_targets()
+    data = json.dumps(payload, default=str).encode()
+    primary_response: dict = {"error": "primary target unreachable"}
+
+    for n, target_url in enumerate(targets, start=1):
+        auth_headers: dict = {}
+        try:
+            auth_headers = get_auth_headers_for_index(n)
+        except Exception:
+            pass
+        try:
+            req = urllib_request.Request(
+                f"{target_url}{path}",
+                data=data,
+                headers={"Content-Type": "application/json", **auth_headers},
+                method="POST",
+            )
+            with urllib_request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                response = json.loads(body) if body else {"ok": True}
+                if n == 1:
+                    primary_response = response
+        except (URLError, OSError, Exception) as e:
+            label = "primary" if n == 1 else f"secondary target {n}"
+            log_hook_issue("vibecheck-mcp", f"Fan-out to {label} failed: POST {path}", e)
+
+    return primary_response
+
+
 def post_dismiss_issue(issue_id: str, resolution_note: str = "") -> dict:
-    """POST a dismiss-issue request and return server result."""
-    try:
-        api_url = get_api_url()
-        session_id, cwd = _get_session_context()
-        payload = {
-            "session_id": session_id,
-            "cwd": cwd,
-            "issue_id": issue_id,
-            "resolution_note": resolution_note,
-        }
-        data = json.dumps(payload, default=str).encode()
-        req = urllib_request.Request(
-            f"{api_url}/api/push/dismiss-issue",
-            data=data,
-            headers={"Content-Type": "application/json", **resolve_auth_headers()},
-            method="POST",
-        )
-        with urllib_request.urlopen(req, timeout=5) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            if body:
-                try:
-                    return json.loads(body)
-                except Exception:
-                    return {"ok": True}
-            return {"ok": True}
-    except (URLError, OSError, Exception) as e:
-        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/dismiss-issue", e)
+    """POST a dismiss-issue request and return server result (fan-out to all targets)."""
+    session_id, cwd = _get_session_context()
+    payload = {
+        "session_id": session_id,
+        "cwd": cwd,
+        "issue_id": issue_id,
+        "resolution_note": resolution_note,
+    }
+    result = _post_to_targets("/api/push/dismiss-issue", payload, timeout=5)
+    if not result.get("ok") and "dismissed" not in result:
         return {"ok": False, "dismissed": 0}
+    return result
 
 
 def post_begin_completion(objective_id: str = "", trigger: str = "manual") -> dict:
-    """POST begin-completion handshake request and return server payload."""
-    try:
-        api_url = get_api_url()
-        session_id, cwd = _get_session_context()
-        payload = {
-            "session_id": session_id,
-            "cwd": cwd,
-            "objective_id": objective_id,
-            "trigger": trigger,
-        }
-        data = json.dumps(payload, default=str).encode()
-        req = urllib_request.Request(
-            f"{api_url}/api/push/begin-completion",
-            data=data,
-            headers={"Content-Type": "application/json", **resolve_auth_headers()},
-            method="POST",
-        )
-        with urllib_request.urlopen(req, timeout=8) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return json.loads(body) if body else {"ok": True}
-    except (URLError, OSError, Exception) as e:
-        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/begin-completion", e)
+    """POST begin-completion handshake to all targets; return primary response (contains blocked state)."""
+    session_id, cwd = _get_session_context()
+    payload = {
+        "session_id": session_id,
+        "cwd": cwd,
+        "objective_id": objective_id,
+        "trigger": trigger,
+    }
+    result = _post_to_targets("/api/push/begin-completion", payload, timeout=8)
+    if result.get("error"):
         return {"ok": False, "blocked": True, "reason": "begin-completion request failed"}
+    return result
 
 
 def post_finalize_objective(objective_id: str = "", checkpoint_summary: str = "") -> dict:
-    """POST finalize-objective request and return server payload."""
-    try:
-        api_url = get_api_url()
-        session_id, cwd = _get_session_context()
-        payload = {
-            "session_id": session_id,
-            "cwd": cwd,
-            "objective_id": objective_id,
-            "checkpoint_summary": checkpoint_summary,
-        }
-        data = json.dumps(payload, default=str).encode()
-        req = urllib_request.Request(
-            f"{api_url}/api/push/finalize-objective",
-            data=data,
-            headers={"Content-Type": "application/json", **resolve_auth_headers()},
-            method="POST",
-        )
-        with urllib_request.urlopen(req, timeout=8) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return json.loads(body) if body else {"ok": True}
-    except (URLError, OSError, Exception) as e:
-        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/finalize-objective", e)
+    """POST finalize-objective to all targets; return primary response (contains blocked state)."""
+    session_id, cwd = _get_session_context()
+    payload = {
+        "session_id": session_id,
+        "cwd": cwd,
+        "objective_id": objective_id,
+        "checkpoint_summary": checkpoint_summary,
+    }
+    result = _post_to_targets("/api/push/finalize-objective", payload, timeout=8)
+    if result.get("error"):
         return {"ok": False, "blocked": True, "reason": "finalize-objective request failed"}
+    return result
 
 
 def _api_call(method: str, path: str, payload: dict | None = None, timeout: int = 8) -> dict:
-    """Make an HTTP call to the VibeCheck API and return JSON response."""
+    """Make an HTTP call to the VibeCheck API and return JSON response.
+
+    POST/PUT/PATCH writes fan-out to all configured targets (primary response returned).
+    GET/DELETE stay single-target (reads and session lookups).
+    """
+    if method in ("POST", "PUT", "PATCH") and payload is not None:
+        return _post_to_targets(path, payload, timeout=timeout)
+
+    # GET/DELETE: single-target only
     try:
         api_url = get_api_url()
         url = f"{api_url}{path}"
@@ -173,22 +202,8 @@ def _api_call(method: str, path: str, payload: dict | None = None, timeout: int 
 
 
 def post_mcp_report(report_data: dict) -> dict:
-    """POST an MCPReport to the VibeCheck server. Returns parsed response dict."""
-    try:
-        api_url = get_api_url()
-        data = json.dumps(report_data, default=str).encode()
-        req = urllib_request.Request(
-            f"{api_url}/api/push/mcp-report",
-            data=data,
-            headers={"Content-Type": "application/json", **resolve_auth_headers()},
-            method="POST",
-        )
-        with urllib_request.urlopen(req, timeout=5) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-            return json.loads(body) if body else {"ok": True}
-    except (URLError, OSError, Exception) as e:
-        log_hook_issue("vibecheck-mcp", "Failed to POST /api/push/mcp-report", e)
-        return {"error": str(e)}
+    """POST an MCPReport to all configured targets. Returns primary response."""
+    return _post_to_targets("/api/push/mcp-report", report_data, timeout=5)
 
 
 def _resolve_session_id() -> str:

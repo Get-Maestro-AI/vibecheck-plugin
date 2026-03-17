@@ -22,8 +22,9 @@ from urllib.error import URLError, HTTPError
 # Add lib/ to path (works regardless of cwd)
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib.auth import resolve_auth_headers  # type: ignore[import]
-from lib.config import get_api_url  # type: ignore[import]
+from lib.auth import get_auth_headers_for_index  # type: ignore[import]
+from lib.config import get_api_targets  # type: ignore[import]
+from lib.fanout import post_to_targets  # type: ignore[import]
 from lib.hook_log import log_hook_issue  # type: ignore[import]
 from lib.transcript import detect_waiting_context  # type: ignore[import]
 
@@ -44,12 +45,6 @@ def main() -> None:
     except (json.JSONDecodeError, Exception) as e:
         log_hook_issue("push_event", "Failed to parse hook payload JSON", e)
         sys.exit(0)  # Never block Claude Code on bad input
-
-    auth_headers = {}
-    try:
-        auth_headers = resolve_auth_headers()
-    except Exception as e:
-        log_hook_issue("push_event", "Failed to resolve auth headers", e)
 
     # On PreToolUse, scan the JSONL tail to detect user-blocking tool calls.
     # This lets the backend set waiting status without hardcoding tool names.
@@ -74,6 +69,7 @@ def main() -> None:
     # Register PPID → session_id on SessionStart (including resume/compact).
     # Delete on SessionEnd. This lets the MCP server resolve its own session_id
     # via os.getppid() without relying on CLAUDE_SESSION_ID (not set in MCP envs).
+    # Both operations fan-out to all configured targets so each instance has the mapping.
     event_name = hook_data.get("hook_event_name", "")
     session_id = hook_data.get("session_id", "")
     if event_name == "SessionStart" and session_id and session_id != "unknown":
@@ -81,68 +77,34 @@ def main() -> None:
             ppid = os.getppid()
             cwd = hook_data.get("cwd", "")
             project_name = hook_data.get("project_name") or (cwd.split("/")[-1] if cwd else "")
-            api_url_ppid = get_api_url()
-            ppid_data = json.dumps({"ppid": ppid, "session_id": session_id, "project_name": project_name}).encode()
-            ppid_req = urllib_request.Request(
-                f"{api_url_ppid}/api/push/session-ppid",
-                data=ppid_data,
-                headers={"Content-Type": "application/json", **auth_headers},
-                method="POST",
+            post_to_targets(
+                "/api/push/session-ppid",
+                {"ppid": ppid, "session_id": session_id, "project_name": project_name},
+                timeout=3,
             )
-            with urllib_request.urlopen(ppid_req, timeout=3):
-                pass
         except Exception as e:
             log_hook_issue("push_event", f"Failed to register PPID session (ppid={os.getppid()})", e)
     elif event_name == "SessionEnd" and session_id:
         try:
             ppid = os.getppid()
-            api_url_ppid = get_api_url()
-            del_req = urllib_request.Request(
-                f"{api_url_ppid}/api/push/session-ppid/{ppid}",
-                headers={"Content-Type": "application/json", **auth_headers},
-                method="DELETE",
-            )
-            with urllib_request.urlopen(del_req, timeout=3):
-                pass
+            targets = get_api_targets()
+            for n, target_url in enumerate(targets, start=1):
+                try:
+                    t_headers = get_auth_headers_for_index(n)
+                    del_req = urllib_request.Request(
+                        f"{target_url}/api/push/session-ppid/{ppid}",
+                        headers={"Content-Type": "application/json", **t_headers},
+                        method="DELETE",
+                    )
+                    with urllib_request.urlopen(del_req, timeout=3):
+                        pass
+                except Exception as e:
+                    if n == 1:
+                        log_hook_issue("push_event", f"Failed to delete PPID session (ppid={ppid})", e)
         except Exception as e:
             log_hook_issue("push_event", f"Failed to delete PPID session (ppid={os.getppid()})", e)
 
-    try:
-        api_url = get_api_url()
-        data = json.dumps(payload, default=str).encode()
-        req = urllib_request.Request(
-            f"{api_url}/api/push/hook-event",
-            data=data,
-            headers={"Content-Type": "application/json", **auth_headers},
-            method="POST",
-        )
-        with urllib_request.urlopen(req, timeout=5):
-            pass
-    except HTTPError as e:
-        body = ""
-        try:
-            body = e.read().decode("utf-8", errors="replace")[:800]
-        except Exception:
-            body = ""
-        log_hook_issue(
-            "push_event",
-            (
-                "Failed to POST /api/push/hook-event "
-                f"(status={e.code}, event={hook_data.get('hook_event_name')}, "
-                f"tool={hook_data.get('tool_name')}, keys={sorted(hook_data.keys())}, "
-                f"response={body})"
-            ),
-            e,
-        )
-    except (URLError, OSError, Exception) as e:
-        log_hook_issue(
-            "push_event",
-            (
-                "Failed to POST /api/push/hook-event "
-                f"(event={hook_data.get('hook_event_name')}, tool={hook_data.get('tool_name')})"
-            ),
-            e,
-        )
+    post_to_targets("/api/push/hook-event", payload)
 
 
 if __name__ == "__main__":
