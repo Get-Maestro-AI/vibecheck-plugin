@@ -17,13 +17,9 @@ import os
 import sys
 import hashlib
 from pathlib import Path
-from urllib import request as urllib_request
-from urllib.error import URLError, HTTPError
-
 sys.path.insert(0, str(Path(__file__).parent))
 
-from lib.auth import resolve_auth_headers  # type: ignore[import]
-from lib.config import get_api_url  # type: ignore[import]
+from lib.fanout import post_to_targets  # type: ignore[import]
 from lib.hook_log import log_hook_issue  # type: ignore[import]
 
 # Bounded tail-read: last 32KB is sufficient for any recent turn pair
@@ -333,12 +329,6 @@ def main() -> None:
 
     turn_payload["token_cumulative"] = token_cumulative
 
-    auth_headers = {}
-    try:
-        auth_headers = resolve_auth_headers()
-    except Exception as e:
-        log_hook_issue("push_turn", "Failed to resolve auth headers", e)
-
     payload = {
         **hook_data,
         "event_id": _build_event_id(hook_data),
@@ -347,34 +337,7 @@ def main() -> None:
         "plugin_version": "1.0.0",
     }
 
-    try:
-        api_url = get_api_url()
-        data = json.dumps(payload, default=str).encode()
-        req = urllib_request.Request(
-            f"{api_url}/api/push/hook-event",
-            data=data,
-            headers={"Content-Type": "application/json", **auth_headers},
-            method="POST",
-        )
-        with urllib_request.urlopen(req, timeout=5):
-            pass
-    except HTTPError as e:
-        body = ""
-        try:
-            body = e.read().decode("utf-8", errors="replace")[:800]
-        except Exception:
-            body = ""
-        log_hook_issue(
-            "push_turn",
-            (
-                "Failed to POST /api/push/hook-event "
-                f"(status={e.code}, event={hook_data.get('hook_event_name')}, "
-                f"response={body})"
-            ),
-            e,
-        )
-    except (URLError, OSError, Exception) as e:
-        log_hook_issue("push_turn", "Failed to POST /api/push/hook-event", e)
+    post_to_targets("/api/push/hook-event", payload)
 
 
 if __name__ == "__main__":
