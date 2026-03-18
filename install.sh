@@ -11,9 +11,39 @@
 # Usage:
 #   bash install.sh
 #   bash install.sh --dry-run
-#   VIBECHECK_API_URL=http://myserver:8420 bash install.sh
+#   VIBECHECK_API_KEY=vc_xxx VIBECHECK_API_URL=https://vibecheck.getmaestro.ai bash install.sh
 
 set -euo pipefail
+
+# ── curl | sh bootstrap ───────────────────────────────────────────────────────
+# When piped from curl, BASH_SOURCE[0] is empty and local files don't exist.
+# Download the plugin to a permanent location and re-exec from there.
+
+PLUGIN_INSTALL_DIR="$HOME/.claude/plugins/vibecheck"
+PLUGIN_REPO="https://github.com/Stratulus/vibecheck-plugin"
+
+_is_piped() {
+  # Running piped if BASH_SOURCE[0] is unset/empty OR scripts/ dir is missing
+  [[ -z "${BASH_SOURCE[0]:-}" ]] || [[ ! -d "$(dirname "${BASH_SOURCE[0]:-/dev/null}")/scripts" ]]
+}
+
+if _is_piped; then
+  echo "Downloading VibeCheck plugin to $PLUGIN_INSTALL_DIR ..."
+  if [[ -d "$PLUGIN_INSTALL_DIR/.git" ]]; then
+    echo "Existing install found — pulling latest ..."
+    git -C "$PLUGIN_INSTALL_DIR" pull --ff-only --quiet
+  elif command -v git &>/dev/null; then
+    git clone --depth 1 "$PLUGIN_REPO" "$PLUGIN_INSTALL_DIR"
+  else
+    # Fallback: download tarball via curl
+    TMP_TAR="$(mktemp -t vibecheck-plugin.XXXXXX.tar.gz)"
+    curl -sSfL "$PLUGIN_REPO/archive/refs/heads/main.tar.gz" -o "$TMP_TAR"
+    mkdir -p "$PLUGIN_INSTALL_DIR"
+    tar -xzf "$TMP_TAR" -C "$PLUGIN_INSTALL_DIR" --strip-components=1
+    rm -f "$TMP_TAR"
+  fi
+  exec bash "$PLUGIN_INSTALL_DIR/install.sh" "$@"
+fi
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 
@@ -101,21 +131,21 @@ ok "MCP server found"
 step "Configuration"
 
 if [[ -z "${VIBECHECK_API_URL:-}" ]]; then
-  read -r -p "  VibeCheck server URL [http://localhost:8420]: " API_URL
-  VIBECHECK_API_URL="${API_URL:-http://localhost:8420}"
+  read -r -p "  VibeCheck server URL [https://vibecheck.getmaestro.ai]: " API_URL
+  VIBECHECK_API_URL="${API_URL:-https://vibecheck.getmaestro.ai}"
 fi
 ok "API URL: $VIBECHECK_API_URL"
 
 if [[ -z "${VIBECHECK_API_KEY:-}" ]]; then
-  read -r -s -p "  VibeCheck API key (leave blank if auth disabled): " API_KEY
+  read -r -s -p "  VibeCheck API key: " API_KEY
   echo ""
   VIBECHECK_API_KEY="${API_KEY:-}"
 fi
-if [[ -n "$VIBECHECK_API_KEY" ]]; then
-  ok "API key: set"
-else
-  warn "API key: not set (auth disabled)"
+if [[ -z "$VIBECHECK_API_KEY" ]]; then
+  err "An API key is required. Get yours at https://vibecheck.getmaestro.ai"
+  exit 1
 fi
+ok "API key: set"
 
 # ── Dry run ───────────────────────────────────────────────────────────────────
 
@@ -126,6 +156,17 @@ if $DRY_RUN; then
   echo "  Commands → $HOME/.claude/commands/vibecheck/"
   exit 0
 fi
+
+# ── Write ~/.config/vibecheck/config ─────────────────────────────────────────
+
+step "Writing config"
+
+mkdir -p "$HOME/.config/vibecheck"
+cat > "$HOME/.config/vibecheck/config" <<EOF
+api_url=$VIBECHECK_API_URL
+api_key=$VIBECHECK_API_KEY
+EOF
+ok "Config written to ~/.config/vibecheck/config"
 
 # ── Hooks → ~/.claude/settings.json ──────────────────────────────────────────
 
@@ -309,10 +350,27 @@ ok "  SessionEnd        → session_summary, post_session_inspect, push_event"
 
 step "Registering MCP server"
 
-MCP_ENV_ARGS=(--env "VIBECHECK_API_URL=$VIBECHECK_API_URL")
-if [[ -n "$VIBECHECK_API_KEY" ]]; then
-  MCP_ENV_ARGS+=(--env "VIBECHECK_API_KEY=$VIBECHECK_API_KEY")
+# If running standalone (no repo venv), create a local venv with the mcp library.
+if [[ "$PYTHON" == "python3" ]]; then
+  VENV_DIR="$SCRIPT_DIR/.venv"
+  if [[ ! -d "$VENV_DIR" ]]; then
+    step "Setting up MCP server dependencies"
+    if command -v uv &>/dev/null; then
+      uv venv "$VENV_DIR" --python python3 --quiet
+      uv pip install --python "$VENV_DIR/bin/python3" mcp --quiet
+    else
+      python3 -m venv "$VENV_DIR"
+      "$VENV_DIR/bin/pip" install mcp --quiet
+    fi
+  fi
+  PYTHON="$VENV_DIR/bin/python3"
+  ok "MCP venv: $VENV_DIR"
 fi
+
+MCP_ENV_ARGS=(
+  --env "VIBECHECK_API_URL=$VIBECHECK_API_URL"
+  --env "VIBECHECK_API_KEY=$VIBECHECK_API_KEY"
+)
 
 # Remove any existing registration before re-adding (idempotent).
 claude mcp remove vibecheck --scope user >/dev/null 2>&1 || true
@@ -355,8 +413,8 @@ if VIBECHECK_API_URL="$VIBECHECK_API_URL" VIBECHECK_API_KEY="$VIBECHECK_API_KEY"
   ok "Server reachable at $VIBECHECK_API_URL"
 else
   warn "Could not reach server at $VIBECHECK_API_URL"
-  warn "Start the server: uv run python -m vibecheck"
-  warn "Then open a new Claude Code session — hooks take effect immediately."
+  warn "Check your API key or visit https://vibecheck.getmaestro.ai"
+  warn "Open a new Claude Code session once the server is reachable — hooks take effect immediately."
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
