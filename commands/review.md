@@ -199,16 +199,19 @@ vibecheck_discover(query="review <objective_title or summary of changes>", layer
 Then for each relevant result, load the full skill brief with `vibecheck_get_context(id)`.
 
 **Merge logic:**
-- Union the heuristic suggestions with discovery results
-- If a skill brief is loaded for a review type, follow its methodology for that type
-- If multiple review types apply, run each in sequence
-- If no skills are found at all, fall back to the Built-in Review Criteria below
+- **`code-review` is always required** when the diff contains any code files (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, etc.). Do not drop it because a more specific review type was discovered.
+- Union Signal A and Signal B — do not pick one type, run **all** that apply. "Security changes were found" does not replace code-review; it adds to it.
+- For each review type in the final set: if a skill brief was loaded for that type, follow its methodology. Otherwise use the Built-in Review Criteria.
+- Run each type in sequence; all findings across all passes go into the single payload.
+- If no skills are found at all, fall back to the Built-in Review Criteria for every type.
 
 ---
 
 ## Phase 3 — Execute review and report
 
 ### Review execution
+
+**You must run every review type in the set — not just the most interesting one.** If the set is `{code-review, security-review}`, run both in full before submitting.
 
 For each review type identified in Phase 2:
 1. If a skill brief was loaded for this type, follow its methodology
