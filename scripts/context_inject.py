@@ -12,11 +12,17 @@ This ensures skills are never crowded out by standards or decisions.
 Query preprocessing (SPEC-149 Phase 3):
   Strips conversational filler before discovery to improve BM25 precision.
 
+Plan suggestion (SPEC-177):
+  Checks /api/plan-context — if a fresh objective (< 10 min) has no active
+  plan, surfaces a one-time suggestion to run /vibecheck:plan.
+
 Uses only stdlib. Always exits 0. Targets < 3s wall time.
 """
 import json
 import re
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib import request as urllib_request
 from urllib import parse as urllib_parse
@@ -43,6 +49,12 @@ _QUERY_MAX_CHARS = 400
 
 # HTTP timeout per request — tight to avoid blocking Claude's response.
 _HTTP_TIMEOUT = 1.8
+
+# Shorter timeout for the plan suggestion check — it's optional and lower priority.
+_PLAN_SUGGESTION_TIMEOUT = 0.8
+
+# Local cache file: records objective IDs that have already received a suggestion.
+_PLAN_SUGGESTION_CACHE = Path.home() / ".vibecheck" / "plan_suggested.json"
 
 # Two-pass discovery limits.
 _SKILL_LIMIT = 3
@@ -169,6 +181,75 @@ def _format_brief(contexts: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _check_plan_suggestion(api_url: str, auth_headers: dict, session_id: str, cwd: str) -> str | None:
+    """Return a plan suggestion string if a fresh objective has no active plan.
+
+    Returns None if no suggestion should be shown (no objective, plan exists,
+    objective is old, or this objective has already been suggested to).
+    """
+    qs: dict = {}
+    if cwd:
+        qs["cwd"] = cwd
+    if session_id and session_id != "unknown":
+        qs["session_id"] = session_id
+    if not qs:
+        return None
+
+    url = f"{api_url}/api/plan-context?{urllib_parse.urlencode(qs)}"
+    req = urllib_request.Request(url, headers={"Accept": "application/json", **auth_headers})
+    try:
+        with urllib_request.urlopen(req, timeout=_PLAN_SUGGESTION_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
+
+    objective_id = (data.get("objective_id") or "").strip()
+    objective_started_at = (data.get("objective_started_at") or "").strip()
+    objective_title = (data.get("objective_title") or "").strip()
+    saved_plan = data.get("saved_plan")
+
+    # Only suggest when there's an active objective with no plan
+    if not objective_id or saved_plan:
+        return None
+
+    # Only suggest for fresh objectives (< 10 min old)
+    if objective_started_at:
+        try:
+            started = datetime.fromisoformat(objective_started_at.replace("Z", "+00:00"))
+            age_min = (datetime.now(timezone.utc) - started).total_seconds() / 60
+            if age_min >= 10:
+                return None
+        except Exception:
+            return None
+    else:
+        return None
+
+    # Only suggest once per objective — track in a local cache file
+    try:
+        cache: dict = {}
+        if _PLAN_SUGGESTION_CACHE.exists():
+            try:
+                cache = json.loads(_PLAN_SUGGESTION_CACHE.read_text())
+            except Exception:
+                cache = {}
+        if objective_id in cache:
+            return None
+        # Mark as shown and persist (prune entries older than 24h)
+        now_ts = time.time()
+        cache[objective_id] = now_ts
+        cache = {k: v for k, v in cache.items() if now_ts - v < 86400}
+        _PLAN_SUGGESTION_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        _PLAN_SUGGESTION_CACHE.write_text(json.dumps(cache))
+    except Exception:
+        return None
+
+    title_part = f' "{objective_title}"' if objective_title else ""
+    return (
+        f"[VibeCheck] New objective{title_part} detected — no active plan yet.\n"
+        f"  Run /vibecheck:plan to structure your approach before diving in."
+    )
+
+
 def main() -> None:
     try:
         hook_data = json.load(sys.stdin)
@@ -178,6 +259,7 @@ def main() -> None:
     # UserPromptSubmit payload includes `prompt` — the user's raw message text.
     prompt = (hook_data.get("prompt") or "").strip()
     session_id = (hook_data.get("session_id") or "").strip()
+    cwd = (hook_data.get("cwd") or "").strip()
 
     if _should_skip(prompt):
         sys.exit(0)
@@ -195,6 +277,15 @@ def main() -> None:
         api_url = get_api_url()
     except Exception:
         sys.exit(0)
+
+    # ── Plan suggestion (SPEC-177) ────────────────────────────────────────
+    # Check once per fresh objective — runs in parallel with discovery via
+    # tight timeout so it never delays Claude's response.
+    plan_suggestion: str | None = None
+    try:
+        plan_suggestion = _check_plan_suggestion(api_url, auth_headers, session_id, cwd)
+    except Exception:
+        pass
 
     # ── Phase 5: Two-pass discovery ──────────────────────────────────────
     # Pass 1: Skills — "What should I do?"
@@ -223,10 +314,15 @@ def main() -> None:
     general = general[:_GENERAL_LIMIT]
 
     contexts = skills + general
-    if not contexts:
+    if not contexts and not plan_suggestion:
         sys.exit(0)
 
-    print(_format_brief(contexts))
+    if plan_suggestion:
+        print(plan_suggestion)
+        if contexts:
+            print()
+    if contexts:
+        print(_format_brief(contexts))
 
 
 if __name__ == "__main__":
