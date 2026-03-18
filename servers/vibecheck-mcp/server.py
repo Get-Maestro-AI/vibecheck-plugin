@@ -347,7 +347,7 @@ async def list_tools() -> list[types.Tool]:
                 "finished implementing a task and are ready for final review. "
                 "Returns the list of files to review. After reviewing, call "
                 "vibecheck_finalize_objective to close out. "
-                "Note: /vibecheck:complete runs this full workflow automatically."
+                "Note: /vibecheck:review runs this full workflow automatically."
             ),
             inputSchema={
                 "type": "object",
@@ -645,6 +645,10 @@ async def list_tools() -> list[types.Tool]:
                         "type": "string",
                         "description": "What you are currently doing in 1-2 sentences — the specific problem or moment. Used to sharpen relevance matching independently of session_id resolution. Example: 'Debugging a race condition in the coverage aggregator after a server restart.'",
                     },
+                    "skill_type": {
+                        "type": "string",
+                        "description": "Filter skills by sub-type (e.g. 'review'). Only meaningful when layer='skill'.",
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Max results to return (default 5)",
@@ -837,6 +841,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return [types.TextContent(type="text", text="Error: query is required.")]
         layer = arguments.get("layer", "")
         ctx_type = arguments.get("type", "")
+        skill_type = arguments.get("skill_type", "")
         situation = (arguments.get("situation") or "").strip()
         repo_tags = arguments.get("repo_tags", [])
         repo_tags_str = ",".join(repo_tags) if repo_tags else ""
@@ -851,6 +856,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             params += f"&type={url_quote(ctx_type)}"
         if repo_tags_str:
             params += f"&repo_tags={url_quote(repo_tags_str)}"
+        if skill_type:
+            params += f"&skill_type={url_quote(skill_type)}"
         # Pass session_id for context-enriched scoring and why_now generation
         if session_id and session_id != "unknown":
             params += f"&session_id={url_quote(session_id)}"

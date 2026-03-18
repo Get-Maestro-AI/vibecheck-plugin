@@ -31,10 +31,6 @@ It connects to your configured VibeCheck server (default: `http://localhost:8420
 | `/vibecheck:fix <ID>` | Investigate and fix a flagged issue |
 | `/vibecheck:implement <ID>` | Begin implementing a spec — loads full context before you write a line |
 | `/vibecheck:resolve <ID>` | Close a specific issue or spec mid-session |
-| `/vibecheck:complete` | Wrap up the current session objective and mark it done |
-
-> **`resolve` vs `complete`:** Use `resolve <ID>` when you've fixed one specific issue and want to close it while the session continues. Use `complete` when you're done with the whole task — it closes the session objective.
-
 ---
 
 **Context Library**
@@ -64,14 +60,14 @@ The Context Library stores specs, decisions, issues, and notes that persist acro
 1. Work normally — VibeCheck tracks progress automatically.
 2. Before committing, run `/vibecheck:review` to catch issues in staged changes.
 3. Fix flagged issues with `/vibecheck:fix <ID>`, then `/vibecheck:resolve <ID>` to close each one.
-4. When the task is done, run `/vibecheck:complete`.
+4. When done, commit your changes.
 
 **Spec workflow**
 
 1. Capture the idea: `/vibecheck:create spec: What you want to build`
 2. Develop it: `/vibecheck:shape <ID>`
 3. Build it: `/vibecheck:implement <ID>`
-4. Close it: `/vibecheck:resolve <ID>` (or handled automatically by `/vibecheck:complete`)
+4. Close it: `/vibecheck:resolve <ID>`
 
 ---
 

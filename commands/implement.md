@@ -47,4 +47,4 @@ Execute the plan step by step. Call `vibecheck_update` at each phase transition 
 **Step 5 — Complete**
 When implementation is done:
 1. Call `vibecheck_resolve` with the spec ID to mark it implemented
-2. Run `/vibecheck:complete` to close out the session objective
+2. Run `/vibecheck:review` to review changes before committing

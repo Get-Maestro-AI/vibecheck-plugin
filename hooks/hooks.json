@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Use /vibecheck:complete before finalizing substantial work.'"
+            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Use /vibecheck:review after substantial work.'"
           },
           {
             "type": "command",
@@ -32,7 +32,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '[VibeCheck] Call vibecheck_update at phase transitions. Before finalizing substantial work, run /vibecheck:complete.'"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/context_inject.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "echo '[VibeCheck] Call vibecheck_update at phase transitions. After substantial work, run /vibecheck:review.'"
           },
           {
             "type": "command",

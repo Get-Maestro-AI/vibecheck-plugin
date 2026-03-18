@@ -15,7 +15,7 @@ First, resolve the context:
 
 ## Step 2 — Initialize or resume shaping
 
-Check if the context already has a `shape_conversation` with entries. If so, resume from where it left off. If not, initialize a shaping session:
+Check if the context already has a `shape_conversation` with entries. If so, resume from where it left off. If not, initialize a shaping session using the `id` field from Step 1:
 
 ```bash
 _VC_CONF="$HOME/.config/vibecheck/config"
@@ -24,21 +24,20 @@ _VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -
 _VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
 _AUTH_ARGS=()
 [ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
+_CTX_ID="<substitute the id value from Step 1 here>"
 
-curl -s -X POST "$_VC_URL/api/contexts/<CONTEXT_ID>/shape/init" \
+curl -s -X POST "$_VC_URL/api/contexts/$_CTX_ID/shape/init" \
   -H "Content-Type: application/json" \
   "${_AUTH_ARGS[@]}" \
   -d '{}' | python3 -m json.tool
 ```
 
-Replace `<CONTEXT_ID>` with the context's actual ID from Step 1.
-
 ## Step 3 — Interactive conversation
 
-The shaping API returns questions to develop the context. Present each question to the user and collect their answer. For each answer:
+The shaping API returns questions to develop the context. Present each question to the user and collect their answer. For each answer, reuse `_CTX_ID` from Step 2:
 
 ```bash
-curl -s -X POST "$_VC_URL/api/contexts/<CONTEXT_ID>/shape" \
+curl -s -X POST "$_VC_URL/api/contexts/$_CTX_ID/shape" \
   -H "Content-Type: application/json" \
   "${_AUTH_ARGS[@]}" \
   -d '{"answer": "<USER_ANSWER>"}'
