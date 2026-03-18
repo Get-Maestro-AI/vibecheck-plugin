@@ -12,7 +12,7 @@ VibeCheck is a real-time session monitoring tool for [Claude Code](https://claud
 ## Install
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/Stratulus/vibecheck-plugin/main/install.sh | sh
+curl -sSf https://raw.githubusercontent.com/Get-Maestro-AI/vibecheck-plugin/main/install.sh | sh
 ```
 
 You will be prompted for your API key. Get one at **https://vibecheck.getmaestro.ai**.
