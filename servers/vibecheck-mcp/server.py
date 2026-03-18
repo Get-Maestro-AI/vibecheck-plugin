@@ -1266,7 +1266,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             type="text",
             text=(
                 "Done checkpoint blocked until completion protocol finishes. "
-                f"{result.get('next_action', result.get('reason', 'Run review then finalize.'))}"
+                f"{result.get('next_action', result.get('reason', 'Non-negotiable: run /vibecheck:review before this session ends.'))}"
             ),
         )]
 
