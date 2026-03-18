@@ -20,7 +20,7 @@ set -euo pipefail
 # Download the plugin to a permanent location and re-exec from there.
 
 PLUGIN_INSTALL_DIR="$HOME/.claude/plugins/vibecheck"
-PLUGIN_REPO="https://github.com/Stratulus/vibecheck-plugin"
+PLUGIN_REPO="https://github.com/Get-Maestro-AI/vibecheck-plugin"
 
 _is_piped() {
   # Running piped if BASH_SOURCE[0] is unset/empty OR scripts/ dir is missing

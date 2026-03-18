@@ -57,12 +57,12 @@ The `vibecheck-plugin/` directory is the root of the public repo. To publish:
 ```bash
 # From the vibecheck2 monorepo root:
 git subtree split --prefix vibecheck-plugin -b vibecheck-plugin-standalone
-git push git@github.com:Stratulus/vibecheck-plugin.git vibecheck-plugin-standalone:main
+git push git@github.com:Get-Maestro-AI/vibecheck-plugin.git vibecheck-plugin-standalone:main
 ```
 
 To update after changes to `vibecheck-plugin/`:
 
 ```bash
 git subtree split --prefix vibecheck-plugin -b vibecheck-plugin-standalone --rejoin
-git push git@github.com:Stratulus/vibecheck-plugin.git vibecheck-plugin-standalone:main
+git push git@github.com:Get-Maestro-AI/vibecheck-plugin.git vibecheck-plugin-standalone:main
 ```

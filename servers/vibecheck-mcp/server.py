@@ -97,8 +97,8 @@ except ImportError:
             return
 
 
-def _post_to_targets(path: str, payload: dict, timeout: int = 5) -> dict:
-    """POST payload to all configured targets. Returns primary response."""
+def _post_to_targets(path: str, payload: dict, timeout: int = 5, method: str = "POST") -> dict:
+    """Write payload to all configured targets using the given HTTP method. Returns primary response."""
     targets = get_api_targets()
     data = json.dumps(payload, default=str).encode()
     primary_response: dict = {"error": "primary target unreachable"}
@@ -114,7 +114,7 @@ def _post_to_targets(path: str, payload: dict, timeout: int = 5) -> dict:
                 f"{target_url}{path}",
                 data=data,
                 headers={"Content-Type": "application/json", **auth_headers},
-                method="POST",
+                method=method,
             )
             with urllib_request.urlopen(req, timeout=timeout) as resp:
                 body = resp.read().decode("utf-8", errors="replace")
@@ -123,7 +123,7 @@ def _post_to_targets(path: str, payload: dict, timeout: int = 5) -> dict:
                     primary_response = response
         except (URLError, OSError, Exception) as e:
             label = "primary" if n == 1 else f"secondary target {n}"
-            log_hook_issue("vibecheck-mcp", f"Fan-out to {label} failed: POST {path}", e)
+            log_hook_issue("vibecheck-mcp", f"Fan-out to {label} failed: {method} {path}", e)
 
     return primary_response
 
@@ -180,7 +180,7 @@ def _api_call(method: str, path: str, payload: dict | None = None, timeout: int 
     GET/DELETE stay single-target (reads and session lookups).
     """
     if method in ("POST", "PUT", "PATCH") and payload is not None:
-        return _post_to_targets(path, payload, timeout=timeout)
+        return _post_to_targets(path, payload, timeout=timeout, method=method)
 
     # GET/DELETE: single-target only
     try:
