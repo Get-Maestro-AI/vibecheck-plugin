@@ -1152,8 +1152,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append("## Skill Library")
             lines.append(
                 f"{skill_lib['count']} active skill(s): {skill_lib['titles']}.\n"
-                "Before starting any non-trivial task, call `vibecheck_discover(query=..., layer=\"skill\")` "
-                "to surface relevant methodology."
+                "Non-negotiable: call `vibecheck_discover(query=..., layer=\"skill\")` before starting work. "
+                "Do not start before checking for a skill."
             )
             lines.append("")
         return [types.TextContent(type="text", text="\n".join(lines))]
@@ -1208,7 +1208,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append("\n## Skill Library")
             lines.append(
                 f"{skill_lib['count']} active skill(s): {skill_lib['titles']}.\n"
-                "Call `vibecheck_discover(query=..., layer=\"skill\")` before starting work."
+                "Non-negotiable: call `vibecheck_discover(query=..., layer=\"skill\")` before starting work. Do not start before checking for a skill."
             )
         lines.append(f"\n---\nWhen implementation is complete, call `vibecheck_resolve` with `id=\"{resolve_id}\"` to mark this spec as implemented.")
         return [types.TextContent(type="text", text="\n".join(lines))]

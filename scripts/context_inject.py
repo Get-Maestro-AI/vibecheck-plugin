@@ -131,10 +131,13 @@ def _discover(api_url: str, auth_headers: dict, query: str,
 def _format_brief(contexts: list[dict]) -> str:
     """Format discovered contexts as a concise brief Claude will act on."""
     lines = ["[VibeCheck] Relevant context for this task:\n"]
+    skill_labels: list[str] = []
     for c in contexts:
         label = c.get("label", "")
         title = c.get("title", "")
         layer = c.get("layer", "")
+        if layer == "skill" and label:
+            skill_labels.append(label)
 
         heading = f"{title} ({label})" if label else title
         layer_tag = f"[{layer}] " if layer else ""
@@ -150,10 +153,19 @@ def _format_brief(contexts: list[dict]) -> str:
 
         lines.append("")
 
-    lines.append(
-        "  Load any context in full with: "
-        'vibecheck_get_context("<label or id>")'
-    )
+    if skill_labels:
+        calls = " and ".join(f'vibecheck_get_context("{lbl}")' for lbl in skill_labels)
+        lines.append(
+            f"  Non-negotiable if relevant: for any [skill] above that applies to your\n"
+            f"  current task, load its full brief first and follow its methodology before\n"
+            f"  responding. Do NOT start work first.\n"
+            f"  Load: {calls}"
+        )
+    else:
+        lines.append(
+            "  Load any context in full with: "
+            'vibecheck_get_context("<label or id>")'
+        )
     return "\n".join(lines)
 
 
