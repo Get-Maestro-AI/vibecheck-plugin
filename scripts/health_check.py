@@ -34,10 +34,12 @@ def main() -> None:
                 print(f"[vibecheck] Connected to {api_url}", file=sys.stderr)
             else:
                 print(f"[vibecheck] Server at {api_url} returned unexpected response", file=sys.stderr)
+                sys.exit(1)
     except (URLError, OSError):
         print(f"[vibecheck] Server not reachable at {api_url} — run: python -m vibecheck", file=sys.stderr)
+        sys.exit(1)
     except Exception:
-        pass
+        sys.exit(1)
 
 
 if __name__ == "__main__":
