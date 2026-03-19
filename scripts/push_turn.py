@@ -12,6 +12,7 @@ skips all content fields — only parses message.usage from assistant entries.
 
 Uses only stdlib. Always exits 0.
 """
+from __future__ import annotations
 import json
 import os
 import sys

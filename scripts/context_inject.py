@@ -18,6 +18,7 @@ Plan suggestion (SPEC-177):
 
 Uses only stdlib. Always exits 0. Targets < 3s wall time.
 """
+from __future__ import annotations
 import json
 import re
 import sys

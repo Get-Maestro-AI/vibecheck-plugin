@@ -7,6 +7,7 @@ and POSTs an extended HookEvent with session_baseline payload to the server.
 
 Uses only stdlib. Always exits 0.
 """
+from __future__ import annotations
 import json
 import os
 import subprocess

@@ -10,6 +10,7 @@ Resolution order for VIBECHECK_FRONTEND_URL:
   2. ~/.config/vibecheck/config  (key=value, line: frontend_url=https://...)
   3. Default: http://localhost:5173
 """
+from __future__ import annotations
 import os
 from pathlib import Path
 

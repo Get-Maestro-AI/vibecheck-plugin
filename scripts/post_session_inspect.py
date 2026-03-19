@@ -11,6 +11,7 @@ Each result is POSTed incrementally so partial data arrives even if killed.
 Always exits 0. Uses only stdlib. Targets at most a few seconds for grep;
 build command is bounded by hook timeout set in hooks.json (25s).
 """
+from __future__ import annotations
 import json
 import os
 import subprocess
