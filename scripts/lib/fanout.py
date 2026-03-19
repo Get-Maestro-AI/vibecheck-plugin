@@ -33,7 +33,7 @@ def post_to_targets(path: str, payload: dict, timeout: int = 5) -> dict:
             req = urllib_request.Request(
                 f"{target_url}{path}",
                 data=data,
-                headers={"Content-Type": "application/json", **auth_headers},
+                headers={"Content-Type": "application/json", "User-Agent": "vibecheck-plugin/2.0", **auth_headers},
                 method="POST",
             )
             with urllib_request.urlopen(req, timeout=timeout) as resp:

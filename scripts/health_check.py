@@ -27,7 +27,7 @@ def main() -> None:
 
     api_url = get_api_url()
     try:
-        req = urllib_request.Request(f"{api_url}/api/health", method="GET")
+        req = urllib_request.Request(f"{api_url}/api/health", headers={"User-Agent": "vibecheck-plugin/2.0"}, method="GET")
         with urllib_request.urlopen(req, timeout=3) as resp:
             body = json.loads(resp.read())
             if body.get("ok"):
