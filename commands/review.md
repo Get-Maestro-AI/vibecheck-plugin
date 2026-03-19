@@ -322,3 +322,36 @@ Then wait for the user's response. If the user says yes (for all or specific iss
 **If VibeCheck is unreachable**, show findings but note results were not saved to the dashboard.
 
 **If no blocking issues were found**, tell the user the changes are ready to commit.
+
+---
+
+## Summarise findings
+
+After presenting the results table, output a single-line status summary using ANSI color codes.
+Parse `ftx_just_completed` from the JSON response returned by the curl POST to `/api/push/vc-review`.
+
+Use this 6-state table to select the right output:
+
+| Condition | Symbol | Line 1 | Line 2 |
+|---|---|---|---|
+| Clean, no prior issues — FTX first cycle | `✓` green | `Clean review. No issues found.` | `One down.` |
+| Clean, no issues — normal | `✓` green | `Clean review. No issues found.` | — |
+| Non-blocking issues only (test gaps, suggestions) | `△` yellow | `Review complete. N suggestions — nothing blocking.` | `Fix them when you're ready.` |
+| Blocking issues found | `✗` red | `N blocking issues found.` | `Not done yet.` |
+| Clean after prior blocking issues — FTX | `✓` green | `Clean review. All issues resolved.` | `Loop closed.` |
+| Clean after prior blocking issues — normal | `✓` green | `Clean review. All issues resolved.` | — |
+
+**Selection logic:**
+- `ftx_just_completed: true` → use the FTX variant of the matching clean state
+- `ready_to_commit: true` and `blocking_issues: 0` and no test_gaps → "Clean, no issues"
+- `ready_to_commit: true` and `blocking_issues: 0` and `ftx_just_completed: true` → "All issues resolved — FTX" (ftx fires only when ≥1 issue was resolved this session)
+- `test_gaps > 0` and `blocking_issues: 0` → "Non-blocking issues"
+- `blocking_issues > 0` → "Blocking issues"
+
+**ANSI codes:** green = `\033[32m`, yellow = `\033[33m`, red = `\033[31m`, reset = `\033[0m`
+
+Print the summary to the terminal using a `Bash` echo command with `-e` flag for ANSI codes. Example for the clean state:
+
+```bash
+echo -e "\033[32m✓ Clean review. No issues found.\033[0m"
+```

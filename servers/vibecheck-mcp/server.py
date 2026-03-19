@@ -455,9 +455,9 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_create_context",
             description=(
                 "Create a new context in the VibeCheck Context Library. "
-                "Use this to capture decisions, file issues, or create notes during a session. "
+                "Use this to capture decisions, file issues, create notes, or save plans during a session. "
                 "Defaults to type='note' for quick capture. Set type='decision' for architectural "
-                "decisions, type='issue' for discovered gaps."
+                "decisions, type='issue' for discovered gaps, type='plan' for implementation plans."
             ),
             inputSchema={
                 "type": "object",
@@ -472,8 +472,8 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "type": {
                         "type": "string",
-                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona"],
-                        "description": "Context type (default: note)",
+                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona", "plan"],
+                        "description": "Context type (default: note). Use 'plan' for implementation plans created by /vibecheck:plan.",
                     },
                     "predecessor_id": {
                         "type": "string",
@@ -1167,8 +1167,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append("## Skill Library")
             lines.append(
                 f"{skill_lib['count']} active skill(s): {skill_lib['titles']}.\n"
-                "Before starting any non-trivial task, call `vibecheck_discover(query=..., layer=\"skill\")` "
-                "to surface relevant methodology."
+                "Non-negotiable: call `vibecheck_discover(query=..., layer=\"skill\")` before starting work. "
+                "Do not start before checking for a skill."
             )
             lines.append("")
         return [types.TextContent(type="text", text="\n".join(lines))]
@@ -1223,7 +1223,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append("\n## Skill Library")
             lines.append(
                 f"{skill_lib['count']} active skill(s): {skill_lib['titles']}.\n"
-                "Call `vibecheck_discover(query=..., layer=\"skill\")` before starting work."
+                "Non-negotiable: call `vibecheck_discover(query=..., layer=\"skill\")` before starting work. Do not start before checking for a skill."
             )
         lines.append(f"\n---\nWhen implementation is complete, call `vibecheck_resolve` with `id=\"{resolve_id}\"` to mark this spec as implemented.")
         return [types.TextContent(type="text", text="\n".join(lines))]
@@ -1281,7 +1281,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             type="text",
             text=(
                 "Done checkpoint blocked until completion protocol finishes. "
-                f"{result.get('next_action', result.get('reason', 'Run review then finalize.'))}"
+                f"{result.get('next_action', result.get('reason', 'Non-negotiable: run /vibecheck:review before this session ends.'))}"
             ),
         )]
 
