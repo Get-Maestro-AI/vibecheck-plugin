@@ -8,12 +8,28 @@ post_to_targets(path, payload, timeout=5) -> dict
 Uses only stdlib (urllib). Always returns a dict; never raises.
 """
 import json
+import ssl
 from urllib import request as urllib_request
 from urllib.error import HTTPError, URLError
+
 
 from lib.config import get_api_targets  # type: ignore[import]
 from lib.auth import get_auth_headers_for_index  # type: ignore[import]
 from lib.hook_log import log_hook_issue  # type: ignore[import]
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Return an SSL context using certifi's CA bundle.
+
+    Fixes SSLCertVerificationError on macOS with python.org Python installs
+    that haven't run 'Install Certificates.command'. certifi is installed into
+    the plugin venv by install.sh; falls back to the default context otherwise.
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
 
 
 def post_to_targets(path: str, payload: dict, timeout: int = 5) -> dict:
@@ -36,7 +52,7 @@ def post_to_targets(path: str, payload: dict, timeout: int = 5) -> dict:
                 headers={"Content-Type": "application/json", "User-Agent": "vibecheck-plugin/2.0", **auth_headers},
                 method="POST",
             )
-            with urllib_request.urlopen(req, timeout=timeout) as resp:
+            with urllib_request.urlopen(req, timeout=timeout, context=_ssl_context()) as resp:
                 body = resp.read().decode("utf-8", errors="replace")
                 response = json.loads(body) if body else {"ok": True}
                 if n == 1:

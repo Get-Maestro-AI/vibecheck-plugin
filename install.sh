@@ -168,6 +168,27 @@ api_key=$VIBECHECK_API_KEY
 EOF
 ok "Config written to ~/.config/vibecheck/config"
 
+# ── Plugin venv (standalone installs) ────────────────────────────────────────
+# Create a local venv with mcp + certifi before hooks are registered so that
+# all hook scripts run under the venv python (certifi fixes SSL cert errors on
+# macOS with python.org Python installs that haven't run Install Certificates).
+
+if [[ "$PYTHON" == "python3" ]]; then
+  VENV_DIR="$SCRIPT_DIR/.venv"
+  if [[ ! -d "$VENV_DIR" ]]; then
+    step "Setting up plugin dependencies"
+    if command -v uv &>/dev/null; then
+      uv venv "$VENV_DIR" --python python3 --quiet
+      uv pip install --python "$VENV_DIR/bin/python3" mcp certifi --quiet
+    else
+      python3 -m venv "$VENV_DIR"
+      "$VENV_DIR/bin/pip" install mcp certifi --quiet
+    fi
+  fi
+  PYTHON="$VENV_DIR/bin/python3"
+  ok "Plugin venv: $VENV_DIR"
+fi
+
 # ── Hooks → ~/.claude/settings.json ──────────────────────────────────────────
 
 step "Configuring Claude Code hooks"
@@ -349,23 +370,6 @@ ok "  SessionEnd        → session_summary, post_session_inspect, push_event"
 # ── MCP server → claude mcp add ──────────────────────────────────────────────
 
 step "Registering MCP server"
-
-# If running standalone (no repo venv), create a local venv with the mcp library.
-if [[ "$PYTHON" == "python3" ]]; then
-  VENV_DIR="$SCRIPT_DIR/.venv"
-  if [[ ! -d "$VENV_DIR" ]]; then
-    step "Setting up MCP server dependencies"
-    if command -v uv &>/dev/null; then
-      uv venv "$VENV_DIR" --python python3 --quiet
-      uv pip install --python "$VENV_DIR/bin/python3" mcp --quiet
-    else
-      python3 -m venv "$VENV_DIR"
-      "$VENV_DIR/bin/pip" install mcp --quiet
-    fi
-  fi
-  PYTHON="$VENV_DIR/bin/python3"
-  ok "MCP venv: $VENV_DIR"
-fi
 
 MCP_ENV_ARGS=(
   --env "VIBECHECK_API_URL=$VIBECHECK_API_URL"
