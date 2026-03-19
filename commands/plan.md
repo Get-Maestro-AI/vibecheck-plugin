@@ -166,13 +166,15 @@ Wait for their answer before continuing:
 
 ## Phase 2 — Discover and load plan skill(s)
 
-Route to the right planning methodology. Use the suggested plan type and objective title from Phase 1 as your query.
+Route to the right planning methodology using the suggested plan type from Phase 1.
 
-Call `vibecheck_discover` to find matching specialists:
+Call `vibecheck_discover` to find matching specialists. **Use a short, action-focused query — the plan type, not the task description:**
 
 ```
-vibecheck_discover(query="plan <objective title or task description>", layer="skill", skill_type="plan", limit=4)
+vibecheck_discover(query="<plan-type>", layer="skill", skill_type="plan", limit=4)
 ```
+
+Examples of good queries: `"feature-plan"`, `"debug-plan"`, `"design-plan"`. Do NOT include the objective title or task description in the query — domain-specific terms dilute relevance and cause mismatches.
 
 **For each skill you decide to use, call `vibecheck_get_context(id)` to load its full brief.** The brief defines the specialist methodology — follow it exactly. Do not substitute your general knowledge for the skill's specific approach.
 
@@ -184,7 +186,13 @@ vibecheck_discover(query="plan <objective title or task description>", layer="sk
 
 **Override:** if `$ARGUMENTS` contains a plan type (e.g., `/vibecheck:plan architecture`), use that type regardless of what discover returns.
 
-If `vibecheck_discover` returns no results or no match is close, use the built-in methodology for the suggested plan type (see Built-in Methodologies below).
+**Fallback — always load SKL-178, never drop to built-in:** If `vibecheck_discover` returns no results, returns results with no `skill_type=plan` match, or returns only unrelated skills, explicitly load `SKL-178` (feature-plan) as the default:
+
+```
+vibecheck_get_context("SKL-178")
+```
+
+Do not fall through to the Built-in Methodologies section. SKL-178 is the floor. Built-in prose is only used if VibeCheck is completely unreachable.
 
 ---
 

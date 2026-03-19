@@ -56,6 +56,15 @@ _PLAN_SUGGESTION_TIMEOUT = 0.8
 # Local cache file: records objective IDs that have already received a suggestion.
 _PLAN_SUGGESTION_CACHE = Path.home() / ".vibecheck" / "plan_suggested.json"
 
+# Local cache file: records session IDs that have already received a workflow nudge.
+_WORKFLOW_NUDGE_CACHE = Path.home() / ".vibecheck" / "workflow_nudged.json"
+
+# Regex matching action-verb prompts that signal "I'm about to build something".
+_TASK_INTENT_RE = re.compile(
+    r"^\s*(build|add|implement|create|make|write|fix|refactor)\b",
+    re.IGNORECASE,
+)
+
 # Two-pass discovery limits.
 _SKILL_LIMIT = 3
 _GENERAL_LIMIT = 2
@@ -181,26 +190,13 @@ def _format_brief(contexts: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _check_plan_suggestion(api_url: str, auth_headers: dict, session_id: str, cwd: str) -> str | None:
+def _check_plan_suggestion_from_data(session_id: str, data: dict | None) -> str | None:
     """Return a plan suggestion string if a fresh objective has no active plan.
 
-    Returns None if no suggestion should be shown (no objective, plan exists,
-    objective is old, or this objective has already been suggested to).
+    Accepts pre-fetched plan-context data. Returns None if no suggestion should
+    be shown (no data, no objective, plan exists, objective is old, or already suggested).
     """
-    qs: dict = {}
-    if cwd:
-        qs["cwd"] = cwd
-    if session_id and session_id != "unknown":
-        qs["session_id"] = session_id
-    if not qs:
-        return None
-
-    url = f"{api_url}/api/plan-context?{urllib_parse.urlencode(qs)}"
-    req = urllib_request.Request(url, headers={"Accept": "application/json", **auth_headers})
-    try:
-        with urllib_request.urlopen(req, timeout=_PLAN_SUGGESTION_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except Exception:
+    if data is None:
         return None
 
     objective_id = (data.get("objective_id") or "").strip()
@@ -250,6 +246,93 @@ def _check_plan_suggestion(api_url: str, auth_headers: dict, session_id: str, cw
     )
 
 
+def _check_workflow_nudge(
+    api_url: str,
+    auth_headers: dict,
+    session_id: str,
+    cwd: str,
+    prompt: str,
+    plan_context_data: dict | None,
+) -> str | None:
+    """Return a workflow nudge string if the user should be guided into the workflow.
+
+    Only fires once per session. Requires an action-verb prompt. Uses the already-fetched
+    plan-context data to avoid a second API call.
+
+    Returns None if no nudge should be shown.
+    """
+    # Only nudge for action-intent prompts
+    preprocessed = _preprocess_query(prompt)
+    if not _TASK_INTENT_RE.match(preprocessed):
+        return None
+
+    # Check if already nudged this session
+    if not session_id or session_id == "unknown":
+        return None
+    try:
+        cache: dict = {}
+        if _WORKFLOW_NUDGE_CACHE.exists():
+            try:
+                cache = json.loads(_WORKFLOW_NUDGE_CACHE.read_text())
+            except Exception:
+                cache = {}
+        if session_id in cache:
+            return None
+    except Exception:
+        return None
+
+    if plan_context_data is None:
+        return None
+
+    active_spec_id = (plan_context_data.get("active_spec_id") or "").strip()
+    saved_plan = plan_context_data.get("saved_plan")
+    objective_started_at = (plan_context_data.get("objective_started_at") or "").strip()
+
+    message: str | None = None
+
+    # Case 1: No spec and no plan — suggest shape
+    if not active_spec_id and not saved_plan:
+        message = (
+            "[VibeCheck] No spec or plan found for this session.\n"
+            "  Run /vibecheck:shape to define what you're building before diving in."
+        )
+
+    # Case 2: Spec exists but no plan — suggest plan
+    elif active_spec_id and not saved_plan:
+        message = (
+            f"[VibeCheck] Spec {active_spec_id} is active but no plan found.\n"
+            "  Run /vibecheck:plan to structure your implementation steps."
+        )
+
+    # Case 3: Both spec and plan — suggest review if session is > 10 min old
+    elif active_spec_id and saved_plan and objective_started_at:
+        try:
+            started = datetime.fromisoformat(objective_started_at.replace("Z", "+00:00"))
+            age_min = (datetime.now(timezone.utc) - started).total_seconds() / 60
+            if age_min >= 10:
+                message = (
+                    "[VibeCheck] You have an active spec and plan.\n"
+                    "  Run /vibecheck:review before committing to catch issues early."
+                )
+        except Exception:
+            pass
+
+    if message is None:
+        return None
+
+    # Mark session as nudged only after confirming there's something to say
+    try:
+        now_ts = time.time()
+        cache[session_id] = now_ts
+        cache = {k: v for k, v in cache.items() if now_ts - v < 86400}
+        _WORKFLOW_NUDGE_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        _WORKFLOW_NUDGE_CACHE.write_text(json.dumps(cache))
+    except Exception:
+        pass
+
+    return message
+
+
 def main() -> None:
     try:
         hook_data = json.load(sys.stdin)
@@ -278,14 +361,41 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    # ── Plan suggestion (SPEC-177) ────────────────────────────────────────
-    # Check once per fresh objective — runs in parallel with discovery via
-    # tight timeout so it never delays Claude's response.
-    plan_suggestion: str | None = None
+    # ── Plan context fetch (shared by plan suggestion + workflow nudge) ──
+    # Fetch once and pass to both checks to avoid duplicate API calls.
+    _plan_context_data: dict | None = None
     try:
-        plan_suggestion = _check_plan_suggestion(api_url, auth_headers, session_id, cwd)
+        qs: dict = {}
+        if cwd:
+            qs["cwd"] = cwd
+        if session_id and session_id != "unknown":
+            qs["session_id"] = session_id
+        if qs:
+            _pc_url = f"{api_url}/api/plan-context?{urllib_parse.urlencode(qs)}"
+            _pc_req = urllib_request.Request(_pc_url, headers={"Accept": "application/json", **auth_headers})
+            with urllib_request.urlopen(_pc_req, timeout=_PLAN_SUGGESTION_TIMEOUT) as _pc_resp:
+                _plan_context_data = json.loads(_pc_resp.read().decode("utf-8"))
     except Exception:
         pass
+
+    # ── Plan suggestion (SPEC-177) ────────────────────────────────────────
+    # Check once per fresh objective — never delays Claude's response.
+    plan_suggestion: str | None = None
+    try:
+        plan_suggestion = _check_plan_suggestion_from_data(session_id, _plan_context_data)
+    except Exception:
+        pass
+
+    # ── P2 workflow nudge (SPEC-198) ─────────────────────────────────────
+    # One-time per-session nudge guiding user into the workflow.
+    workflow_nudge: str | None = None
+    if not plan_suggestion:  # Don't stack with plan suggestion
+        try:
+            workflow_nudge = _check_workflow_nudge(
+                api_url, auth_headers, session_id, cwd, prompt, _plan_context_data
+            )
+        except Exception:
+            pass
 
     # ── Phase 5: Two-pass discovery ──────────────────────────────────────
     # Pass 1: Skills — "What should I do?"
@@ -314,11 +424,15 @@ def main() -> None:
     general = general[:_GENERAL_LIMIT]
 
     contexts = skills + general
-    if not contexts and not plan_suggestion:
+    if not contexts and not plan_suggestion and not workflow_nudge:
         sys.exit(0)
 
     if plan_suggestion:
         print(plan_suggestion)
+        if contexts:
+            print()
+    if workflow_nudge:
+        print(workflow_nudge)
         if contexts:
             print()
     if contexts:

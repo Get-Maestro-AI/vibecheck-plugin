@@ -440,9 +440,9 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_create_context",
             description=(
                 "Create a new context in the VibeCheck Context Library. "
-                "Use this to capture decisions, file issues, or create notes during a session. "
+                "Use this to capture decisions, file issues, create notes, or save plans during a session. "
                 "Defaults to type='note' for quick capture. Set type='decision' for architectural "
-                "decisions, type='issue' for discovered gaps."
+                "decisions, type='issue' for discovered gaps, type='plan' for implementation plans."
             ),
             inputSchema={
                 "type": "object",
@@ -457,8 +457,8 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "type": {
                         "type": "string",
-                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona"],
-                        "description": "Context type (default: note)",
+                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona", "plan"],
+                        "description": "Context type (default: note). Use 'plan' for implementation plans created by /vibecheck:plan.",
                     },
                     "predecessor_id": {
                         "type": "string",
