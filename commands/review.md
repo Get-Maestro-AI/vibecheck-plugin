@@ -243,64 +243,43 @@ If no meaningful issues exist, the review should be clean (ready_to_commit: true
 ## Finalize and submit
 
 1. Decide: is this safe to commit as-is?
-2. Submit findings to VibeCheck using the exact curl command below.
+2. Submit findings using `vibecheck_push_review` — session_id and cwd are resolved automatically.
 3. Parse the response and present a summary to the user.
 
-**Constructing the curl payload:**
-Build the JSON payload with your actual findings, then run this curl command:
-
-```bash
-_VC_CONF="$HOME/.config/vibecheck/config"
-_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
-_AUTH_ARGS=()
-[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
-
-curl -s -X POST "$_VC_URL/api/push/vc-review" \
-  -H "Content-Type: application/json" \
-  "${_AUTH_ARGS[@]}" \
-  -d '<YOUR_JSON_PAYLOAD>'
 ```
-
-The JSON payload structure:
-```json
-{
-  "session_id": "!`echo ${CLAUDE_SESSION_ID:-unknown}`",
-  "cwd": "!`pwd`",
-  "staged_files": ["<from Reviewed files list above>"],
-  "blocking_issues": [
+vibecheck_push_review(
+  staged_files=["<from Reviewed files list above>"],
+  blocking_issues=[
     {
       "title": "<short title, max 80 chars>",
-      "category": "<review type that produced this finding, e.g. code-review, design-review>",
-      "severity": "High",
-      "location": "<file.py:line or function name>",
+      "category": "<review type, e.g. code-review, design-review>",
+      "severity": "High",           # Critical | High | Medium | Low
+      "location": "<file.py:line>",
       "problem": "<one sentence: what is wrong>",
       "why_risky": "<one sentence: what bad thing happens if this ships>",
       "concrete_fix": "<specific code change or approach>"
     }
   ],
-  "test_gaps": [
+  test_gaps=[
     {
       "name": "<test name>",
       "scenario": "<what condition to test>",
       "expected_behavior": "<what should happen>"
     }
   ],
-  "ready_to_commit": false
-}
+  ready_to_commit=False
+)
 ```
 
 Notes:
-- Do not include an `id` field in blocking issues — the server assigns IDs automatically.
-- If there are no blocking issues: `"blocking_issues": [], "ready_to_commit": true`
-- If there are no test gaps: `"test_gaps": []`
+- If there are no blocking issues: `blocking_issues=[], ready_to_commit=True`
+- If there are no test gaps: `test_gaps=[]`
 
 ---
 
 ## After submitting
 
-Parse the JSON response from the curl command. The response includes an `issues` array with server-assigned IDs, titles, and severities.
+Parse the JSON response from `vibecheck_push_review`. The response includes an `issues` array with server-assigned IDs, titles, and severities.
 
 Present results in this format:
 
@@ -328,7 +307,7 @@ Then wait for the user's response. If the user says yes (for all or specific iss
 ## Summarise findings
 
 After presenting the results table, output a single-line status summary using ANSI color codes.
-Parse `ftx_just_completed` from the JSON response returned by the curl POST to `/api/push/vc-review`.
+Parse `ftx_just_completed` from the `vibecheck_push_review` tool response.
 
 Use this 6-state table to select the right output:
 

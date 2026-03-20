@@ -692,6 +692,61 @@ async def list_tools() -> list[types.Tool]:
                 "required": ["id"],
             },
         ),
+        types.Tool(
+            name="vibecheck_push_review",
+            description=(
+                "Submit a structured code review to the VibeCheck dashboard. "
+                "Call this at the end of /vibecheck:review to persist findings, "
+                "create tracked issues, and get the ftx_just_completed signal for "
+                "the status summary. session_id and cwd are resolved automatically. "
+                "Returns: ok, blocking_issues count, issues[] with server-assigned IDs, "
+                "ready_to_commit, and ftx_just_completed."
+            ),
+            inputSchema={
+                "type": "object",
+                "required": ["ready_to_commit"],
+                "properties": {
+                    "staged_files": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Files reviewed in this pass",
+                    },
+                    "blocking_issues": {
+                        "type": "array",
+                        "description": "Issues that must be fixed before committing",
+                        "items": {
+                            "type": "object",
+                            "required": ["title", "category", "severity", "location", "problem", "why_risky", "concrete_fix"],
+                            "properties": {
+                                "title":        {"type": "string"},
+                                "category":     {"type": "string"},
+                                "severity":     {"type": "string", "enum": ["Critical", "High", "Medium", "Low"]},
+                                "location":     {"type": "string"},
+                                "problem":      {"type": "string"},
+                                "why_risky":    {"type": "string"},
+                                "concrete_fix": {"type": "string"},
+                            },
+                        },
+                    },
+                    "test_gaps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["name", "scenario", "expected_behavior"],
+                            "properties": {
+                                "name":              {"type": "string"},
+                                "scenario":          {"type": "string"},
+                                "expected_behavior": {"type": "string"},
+                            },
+                        },
+                    },
+                    "ready_to_commit": {
+                        "type": "boolean",
+                        "description": "True if no blocking issues remain",
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -757,6 +812,18 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 f"(protocol_status={result.get('protocol_status', 'unknown')})"
             ),
         )]
+
+    if name == "vibecheck_push_review":
+        payload = {
+            "session_id": session_id,
+            "cwd": cwd,
+            "staged_files": arguments.get("staged_files", []),
+            "blocking_issues": arguments.get("blocking_issues", []),
+            "test_gaps": arguments.get("test_gaps", []),
+            "ready_to_commit": arguments.get("ready_to_commit", True),
+        }
+        result = _post_to_targets("/api/push/vc-review", payload, timeout=8)
+        return [types.TextContent(type="text", text=json.dumps(result))]
 
     # ── Context Library tool handlers ────────────────────────────────────────
 

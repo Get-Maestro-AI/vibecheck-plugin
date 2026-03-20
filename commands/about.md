@@ -71,4 +71,25 @@ The Context Library stores specs, decisions, issues, and notes that persist acro
 
 ---
 
+**MCP tools** (available directly in Claude Code conversations)
+
+| Tool | What it does |
+|---|---|
+| `vibecheck_update` | Post a progress checkpoint to the dashboard |
+| `vibecheck_create_context` | Create a context (issue, spec, decision, note) |
+| `vibecheck_update_context` | Update an existing context's brief or status |
+| `vibecheck_get_context` | Load full detail for a context by ID |
+| `vibecheck_list_contexts` | Browse contexts with optional filters |
+| `vibecheck_discover` | Find relevant contexts by semantic query |
+| `vibecheck_find_related` | Find contexts related to a given context ID |
+| `vibecheck_link_context` | Link a context to the current session/objective |
+| `vibecheck_get_active_context_set` | Load full active context set for a context |
+| `vibecheck_resolve` | Mark a context resolved |
+| `vibecheck_push_review` | Submit structured review findings (used by `/vibecheck:review`) |
+| `vibecheck_begin_completion` | Start the objective completion protocol |
+| `vibecheck_finalize_objective` | Finalize and close the current objective |
+| `vibecheck_implement` | Begin implementing a spec from the library |
+
+---
+
 | `/vibecheck:about` | Show this message |
