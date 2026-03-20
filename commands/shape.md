@@ -7,6 +7,26 @@ Shape a VibeCheck context through an interactive conversation.
 
 **Arguments:** $ARGUMENTS
 
+---
+
+## Step 0 — Pre-flight checks (run before anything else)
+
+1. **Explicit specialist override:** Does the input contain a specialist name
+   ("Mara", "design specialist", "Marcus", "product specialist", "CEO specialist")?
+   If yes, skip all routing logic — load that specialist directly (Step 2) and proceed.
+
+2. **Restart intent:** Does the input contain "start over", "restart", "fresh",
+   "from scratch", or similar? If yes AND a prior shape_conversation exists on the
+   context, confirm once: "You have a prior shaping conversation. Start over?".
+   If confirmed, call DELETE /{context_id}/shape, then proceed with an empty conversation.
+
+3. **Reachability check:** Call GET /api/status. If it fails, wait 2 seconds and retry once.
+   If it fails again (connection refused, timeout, or error response):
+   enter degraded mode — tell the user, shape in-memory, skip turn logging.
+   Do NOT abort. See "Degraded Mode" section.
+
+---
+
 ## Step 1 — Detect entry path
 
 Classify `$ARGUMENTS`:
@@ -26,7 +46,9 @@ Ask the user one question: "What do you want to shape?" Wait for their answer, t
 - User / problem / pain / persona / who-is-this-for → `product-specialist`
 - Ambiguous → ask ONE clarifying question: "Is this mainly about the design direction, the strategy/scope, or the user problem?"
 
-Once you know the direction, load the sub-specialist skill and conduct the shaping conversation using its methodology (see Step 3).
+Once you know what the user wants to shape, create a spec context using the Path B curl snippet (using their answer as the title seed). Extract the context ID. Then load the sub-specialist and conduct the shaping conversation, logging all turns with the context ID.
+
+**The anchor must exist before the first specialist question.**
 
 ---
 
@@ -80,6 +102,13 @@ Read the context type and existing brief/conversation. Route to sub-specialist b
 
 If the context has an existing `shape_conversation`, resume from where it left off — do not restart.
 
+**If the resolved context has `type=issue`:**
+1. Tell the user: "This is an issue — shaping it will produce a new spec. The issue will be linked as a predecessor."
+2. Create a new spec via POST /api/contexts with the issue title as seed and `predecessor_id` set to the issue's id.
+3. Extract the new spec's id. Proceed shaping the spec (not the issue).
+4. At the end of the conversation (Step 4), update the issue status to dispatched:
+   `POST /{issue_id}/status {"status": "dispatched"}`
+
 ---
 
 ## Step 2 — Load the sub-specialist
@@ -104,14 +133,61 @@ Available sub-specialists:
 
 ---
 
+## Step 1a — Brief assessment (run before asking anything)
+
+After loading the sub-specialist, before asking any question:
+
+Check which of the four product dimensions are already answered in the user's
+input and/or the context brief:
+- Q1 (Who is this for?) — Is a specific human or the user themselves described?
+- Q2 (What pain?) — Is a concrete friction or failure mode described?
+- Q3 (What does success look like?) — Is an outcome or before/after described?
+- Q4 (Minimum scope?) — Are there explicit changes, inclusions, or exclusions?
+
+Determine dialog mode:
+
+**REFINEMENT MODE (>=2 dimensions answered):**
+Open with a synthesis paragraph — "Here's what I'm taking from what you
+said: [1-paragraph summary of the job to be done]."
+Then ask at most ONE question about the single most critical unanswered dimension.
+Turn budget: 0–1 questions. If all four dimensions are answerable, produce
+the brief directly — no questions.
+
+**DISCOVERY MODE (0–1 dimensions answered):**
+Run Q1 → Q2 → Q3 → Q4 in order, one question at a time.
+Turn budget: maximum 4 questions.
+If you are about to ask a fifth question, produce the brief instead and mark
+the unanswered dimension as an open question in the brief.
+
+The synthesis opening in refinement mode proves you read the input. If the
+synthesis is wrong, the user will correct it — faster than answering Q1 cold.
+
+---
+
 ## Step 3 — Conduct the shaping conversation
 
 Run the shaping conversation in-skill using the loaded sub-specialist's methodology:
 
+- **Read before asking** — perform Step 1a before every first question. Do not open with Q1 if the user self-identified as the target user.
+- **Refinement mode:** open with synthesis, ask at most 1 question.
+- **Discovery mode:** Q1→Q4 in order, stop at 4. Fifth question = produce brief.
+- The turn limit is a judgment call, not mechanical — but the DEFAULT is to produce the brief rather than ask another question when in doubt.
 - Ask one question at a time — the most important one, not a list
 - State recommendations directly — no menus of equal options
 - Challenge vague language — "improve" and "uplift" are not specs
 - Do not recap what the user just said — move forward
+
+**When resuming a prior conversation with more than 8 turns:**
+Before asking anything, produce a bullet summary:
+"Based on our last session, here's what we established:
+ - [settled Q1 answer]
+ - [settled Q2 answer]
+ - [any scope decisions made]
+Resuming from: [last open question or decision point]."
+
+Do not re-ask any question that has a clear answer in the prior conversation.
+If the prior conversation is contradictory (user may have changed their mind),
+surface it: "Last time we said X — does that still stand?"
 
 Log each turn to VibeCheck for persistence:
 
@@ -154,6 +230,19 @@ The applied brief must match the output of the sub-specialist's methodology exac
    - If spec: "Ready for `/vibecheck:plan` to structure your approach, or `/vibecheck:implement <label>` to go straight to implementation"
    - If design: "DESIGN.md written — ready for implementation"
    - If strategy: "Go/no-go decision captured — proceed to `/vibecheck:plan` if go"
+
+---
+
+## Degraded Mode (VibeCheck unreachable)
+
+When shape/init fails or the API is unreachable:
+
+1. Tell the user: "VibeCheck isn't reachable — shaping in-memory. I'll offer to persist when available."
+2. Proceed with the full shaping conversation. Skip all shape/message logging.
+3. At the end, present the shaped brief as markdown.
+4. Offer: "VibeCheck is still unreachable. Here's the brief — paste it into the context manually, or retry when the server is back."
+
+Shape always works. The server is for persistence, not for the conversation.
 
 ---
 
