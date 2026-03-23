@@ -763,12 +763,15 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         dismissed = int(result.get("dismissed", 0) or 0) if isinstance(result, dict) else 0
         note_suffix = f" ({note})" if note else ""
         if dismissed > 0:
+            resolved_label = ctx_id
             # Auto-link: resolving an issue records which session fixed it
             if session_id and session_id != "unknown":
                 try:
                     # Resolve label → canonical UUID first (label lookup in GET endpoint)
                     resolved_ctx = _api_call("GET", f"/api/contexts/{url_quote(ctx_id, safe='')}")
                     canonical_id = resolved_ctx.get("id") if resolved_ctx and not resolved_ctx.get("error") else None
+                    if resolved_ctx.get("label"):
+                        resolved_label = resolved_ctx["label"]
                     if canonical_id:
                         _api_call("POST", f"/api/contexts/{canonical_id}/link-session", {
                             "session_id": session_id,
@@ -776,7 +779,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                         })
                 except Exception:
                     pass
-            text = f"Resolved {ctx_id} in VibeCheck{note_suffix}."
+            url = f"{get_frontend_url()}/#context/{resolved_label}"
+            text = f"Resolved {ctx_id} in VibeCheck{note_suffix}.\nView: {url}"
         else:
             text = f"Could not resolve {ctx_id} — no matching active context found{note_suffix}."
         return [types.TextContent(type="text", text=text)]
@@ -875,6 +879,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             f"# {heading}",
             f"**Type:** {result['type']} | **Status:** {result['status']} | **Layer:** {result.get('layer', '')}",
         ]
+        if label:
+            lines.append(f"**Permalink:** {get_frontend_url()}/#context/{label}")
         if result.get("tags"):
             lines.append(f"**Tags:** {', '.join(result['tags'])}")
 
@@ -1049,13 +1055,16 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         ctx_type = result.get("type", "note")
         title = result.get("title", "")
 
-        if ctx_type == "decision" and label:
+        if label:
             url = f"{get_frontend_url()}/#context/{label}"
-            text = (
-                f"Decision logged to Context Library: \"{title}\" ({label})\n"
-                f"View: {url}\n"
-                f"*Tell the developer: \"I documented this decision as {label} in VibeCheck.\"*"
-            )
+            if ctx_type == "decision":
+                text = (
+                    f"Decision logged to Context Library: \"{title}\" ({label})\n"
+                    f"View: {url}\n"
+                    f"*Tell the developer: \"I documented this decision as {label} in VibeCheck.\"*"
+                )
+            else:
+                text = f"Context created: [{ctx_type}] \"{title}\" ({label})\nView: {url}"
         else:
             text = f"Context created: [{ctx_type}] \"{title}\" (id={id_str})"
 
@@ -1136,9 +1145,11 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             except Exception:
                 pass
 
+        updated_label = result.get("label")
+        url_suffix = f"\nView: {get_frontend_url()}/#context/{updated_label}" if updated_label else ""
         return [types.TextContent(
             type="text",
-            text=f"Context updated: \"{result['title']}\" — status={result['status']}",
+            text=f"Context updated: \"{result['title']}\" — status={result['status']}{url_suffix}",
         )]
 
     if name == "vibecheck_link_context":
@@ -1270,6 +1281,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         lines = [
             f"# Implementing: {heading}",
             f"**Type:** {ctx['type']} | **Status:** {ctx['status']} | **Layer:** {ctx['layer']}",
+        ]
+        if label:
+            lines.append(f"**Permalink:** {get_frontend_url()}/#context/{label}")
+        lines += [
             "",
             f"## Spec Brief\n{ctx.get('brief') or '(no brief — use vibecheck_update_context to add one)'}",
         ]
