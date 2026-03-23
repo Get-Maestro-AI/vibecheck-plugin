@@ -770,7 +770,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                     # Resolve label → canonical UUID first (label lookup in GET endpoint)
                     resolved_ctx = _api_call("GET", f"/api/contexts/{url_quote(ctx_id, safe='')}")
                     canonical_id = resolved_ctx.get("id") if resolved_ctx and not resolved_ctx.get("error") else None
-                    if resolved_ctx.get("label"):
+                    if resolved_ctx and resolved_ctx.get("label"):
+                        resolved_label = resolved_ctx["label"]
                         resolved_label = resolved_ctx["label"]
                     if canonical_id:
                         _api_call("POST", f"/api/contexts/{canonical_id}/link-session", {
