@@ -235,11 +235,6 @@ OUR_HOOKS = {
             "command": f"{python_exe} {scripts_dir}/scan_artifacts.py",
             "options": {"async": True, "timeout": 15},
         },
-        {
-            "identity": "index_skills.py",
-            "command": f"{python_exe} {scripts_dir}/index_skills.py",
-            "options": {"async": True, "timeout": 15},
-        },
     ],
     "UserPromptSubmit": [
         {
@@ -388,7 +383,7 @@ print("ok")
 PYEOF
 
 ok "Hooks registered in $SETTINGS_FILE"
-ok "  SessionStart      → health_check, session_baseline, push_event, artifact scan, skill index"
+ok "  SessionStart      → health_check, session_baseline, push_event, artifact scan"
 ok "  UserPromptSubmit  → context_inject, push_event"
 ok "  PreToolUse        → push_event"
 ok "  PostToolUse       → push_event, ExitPlanMode save-reminder, artifact capture (Write|Edit)"
