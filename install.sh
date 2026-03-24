@@ -230,6 +230,11 @@ OUR_HOOKS = {
             "command": f"{python_exe} {scripts_dir}/push_event.py",
             "options": {"async": True},
         },
+        {
+            "identity": "scan_artifacts.py",
+            "command": f"{python_exe} {scripts_dir}/scan_artifacts.py",
+            "options": {"async": True, "timeout": 15},
+        },
     ],
     "UserPromptSubmit": [
         {
@@ -266,6 +271,12 @@ OUR_HOOKS = {
             "command": "echo '[VibeCheck] Plan mode exited. If the plan was not saved to VibeCheck, save it now using vibecheck_create_context(type=plan) and POST to /api/push/vc-plan before proceeding.'",
             "options": {},
             "matcher": "ExitPlanMode",
+        },
+        {
+            "identity": "capture_artifact.py",
+            "command": f"{python_exe} {scripts_dir}/capture_artifact.py",
+            "options": {"timeout": 5},
+            "matcher": "Write|Edit",
         },
     ],
     "PostToolUseFailure": [
@@ -374,10 +385,10 @@ print("ok")
 PYEOF
 
 ok "Hooks registered in $SETTINGS_FILE"
-ok "  SessionStart      → health_check, session_baseline, push_event"
+ok "  SessionStart      → health_check, session_baseline, push_event, artifact scan"
 ok "  UserPromptSubmit  → context_inject, push_event"
 ok "  PreToolUse        → push_event"
-ok "  PostToolUse       → push_event, ExitPlanMode save-reminder"
+ok "  PostToolUse       → push_event, ExitPlanMode save-reminder, artifact capture (Write|Edit)"
 ok "  PostToolUseFailure→ push_event"
 ok "  SubagentStart/Stop→ push_event"
 ok "  Stop              → push_turn, push_event"

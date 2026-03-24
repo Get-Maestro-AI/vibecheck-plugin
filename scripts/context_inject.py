@@ -439,6 +439,15 @@ def main() -> None:
     if contexts:
         print(_format_brief(contexts))
 
+    # Standing dedup instruction — always emit when any output was shown,
+    # so Claude knows file-written artifacts are captured automatically.
+    if contexts or plan_suggestion or workflow_nudge:
+        print(
+            "\n[VibeCheck] File-written artifacts (specs, plans, design docs) are "
+            "automatically captured. Only use vibecheck_create_context for decisions, "
+            "findings, and insights from conversation — never for content just written to a file."
+        )
+
 
 if __name__ == "__main__":
     main()
