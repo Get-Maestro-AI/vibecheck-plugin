@@ -201,6 +201,18 @@ def _run(hook_data: dict) -> None:
 
     # Check manifest
     manifest = read_manifest(cwd)
+
+    # One-time migration: re-key entries whose key starts with ".." to absolute paths.
+    # Old code keyed out-of-CWD files by relative path (fragile "../../..." strings);
+    # new code uses the absolute path. Without this, existing manifests miss the match
+    # and create duplicate contexts for files already tracked.
+    stale_keys = [k for k in manifest.get("artifacts", {}) if k.startswith("..")]
+    if stale_keys:
+        for old_key in stale_keys:
+            abs_key = str(Path(cwd) / old_key)
+            manifest["artifacts"][abs_key] = manifest["artifacts"].pop(old_key)
+        write_manifest(cwd, manifest)
+
     entry = get_entry(manifest, manifest_key)
     current_hash = content_hash(content)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -237,7 +249,7 @@ def _run(hook_data: dict) -> None:
             print(f"\n[VibeCheck] Artifact updated: [{context_type}] \"{title}\" ({label})")
             print(f"  → {frontend_url}/#context/{label}\n")
         else:
-            log_hook_issue("capture_artifact", f"Failed to update context {context_id} for {rel_path}")
+            log_hook_issue("capture_artifact", f"Failed to update context {context_id} for {manifest_key}")
 
     else:
         # New artifact — create context
@@ -266,7 +278,7 @@ def _run(hook_data: dict) -> None:
             print(f"\n[VibeCheck] Artifact captured: [{context_type}] \"{title}\" ({label})")
             print(f"  → {frontend_url}/#context/{label}\n")
         else:
-            log_hook_issue("capture_artifact", f"Failed to create context for {rel_path}")
+            log_hook_issue("capture_artifact", f"Failed to create context for {manifest_key}")
 
 
 if __name__ == "__main__":
