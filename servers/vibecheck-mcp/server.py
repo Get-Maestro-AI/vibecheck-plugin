@@ -827,8 +827,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return [types.TextContent(type="text", text=(
                 f"Objective finalized: {result.get('objective_id', '')}.\n\n"
                 "**VibeCheck improve pass:** Before responding to the user, run the improve pass — "
-                "call vibecheck_discover(query=\"improve-pass\", layer=\"skill\") to load the skill, "
-                "then follow its methodology. This is how VibeCheck gets smarter each session."
+                "call vibecheck_discover(query=\"improve skill methodology\", layer=\"skill\", skill_type=\"improve\") "
+                "to find the right improve specialist(s), load each matched skill's full brief with "
+                "vibecheck_get_context(id), then follow its methodology. "
+                "This is how VibeCheck gets smarter each session."
             ))]
         return [types.TextContent(
             type="text",

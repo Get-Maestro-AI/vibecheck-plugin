@@ -30,6 +30,7 @@ It connects to your configured VibeCheck server (default: `http://localhost:8420
 | `/vibecheck:review` | Review staged changes for bugs before committing |
 | `/vibecheck:fix <ID>` | Investigate and fix a flagged issue |
 | `/vibecheck:implement <ID>` | Begin implementing a spec — loads full context before you write a line |
+| `/vibecheck:improve` | Run the improve pass manually — refines skills based on session friction |
 | `/vibecheck:resolve <ID>` | Close a specific issue or spec mid-session |
 ---
 
