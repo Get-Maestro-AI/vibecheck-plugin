@@ -109,6 +109,18 @@ _CORRECTION_PATTERNS = [
 _SKILL_LIMIT = 3
 _GENERAL_LIMIT = 2
 
+# Stop-words for correction dedup keyword extraction.
+# Includes contraction fragments produced by re.findall(r"\w+") splitting on
+# apostrophes — e.g. "don't" → ["don", "t"], "won't" → ["won", "t"].
+_DEDUP_STOP_WORDS = {
+    "i", "we", "don", "dont", "doesn", "doesnt", "won", "wont", "isn", "isnt",
+    "wasn", "wasnt", "couldn", "shouldnt", "wouldn", "haven", "hadn",
+    "never", "always", "use", "run", "call", "do", "stop", "using", "not",
+    "told", "you", "said", "this", "ve", "ive", "already", "a", "an", "the",
+    "and", "or", "to", "for", "of", "in", "on", "at", "is", "it", "with",
+    "that", "my", "our", "your", "t",
+}
+
 # ── Phase 3: Query preprocessing ────────────────────────────────────────────
 
 # Conversational filler prefixes to strip (case-insensitive).
@@ -390,7 +402,7 @@ def _check_correction_signal(prompt: str) -> tuple[str, str] | None:
 
 
 def _correction_already_covered(
-    signal_phrase: str, topic_context: str, api_url: str, auth_headers: dict
+    topic_context: str, api_url: str, auth_headers: dict
 ) -> bool:
     """Return True if the correction topic is already covered by an always-inject standard.
 
@@ -418,17 +430,12 @@ def _correction_already_covered(
             return False
 
         # Extract topic words from the broader context (signal phrase + following text).
-        # Ignore common stop-words so we match on the actual subject (e.g. "bash", "zsh").
-        _STOP = {
-            "i", "we", "don't", "dont", "never", "always", "use", "run", "call",
-            "do", "stop", "using", "not", "told", "you", "said", "this", "ve",
-            "ive", "already", "a", "an", "the", "and", "or", "to", "for", "of",
-            "in", "on", "at", "is", "it", "with", "that", "my", "our", "your",
-        }
+        # Uses module-level _DEDUP_STOP_WORDS which includes contraction fragments
+        # (e.g. "don" from "don't") to avoid spurious matches.
         topic_words = {
             w.lower()
             for w in re.findall(r"\w+", topic_context)
-            if w.lower() not in _STOP and len(w) > 2
+            if w.lower() not in _DEDUP_STOP_WORDS and len(w) > 2
         }
 
         for std in standards:
@@ -526,7 +533,7 @@ def main() -> None:
     correction_nudge: str | None = None
     try:
         _signal = _check_correction_signal(prompt)
-        if _signal and not _correction_already_covered(_signal[0], _signal[1], api_url, auth_headers):
+        if _signal and not _correction_already_covered(_signal[1], api_url, auth_headers):
             correction_nudge = (
                 "[VibeCheck] Correction signal detected. If this states a codebase convention,\n"
                 "capture it before responding:\n"
