@@ -37,7 +37,7 @@ from lib.manifest import (  # type: ignore[import]
 
 def _extract_title(content: str, file_path: str) -> str:
     """Extract title from first markdown heading, fallback to filename."""
-    match = re.search(r"^#\s+(.+)", content, re.MULTILINE)
+    match = re.search(r"^#{1,6}\s+(.+)", content, re.MULTILINE)
     if match:
         title = match.group(1).strip()
         # Remove markdown formatting

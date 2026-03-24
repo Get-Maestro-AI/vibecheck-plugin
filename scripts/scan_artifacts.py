@@ -79,7 +79,7 @@ def _create_context(file_path: str, content: str, context_type: str, session_id:
     import re
 
     # Extract title
-    match = re.search(r"^#\s+(.+)", content, re.MULTILINE)
+    match = re.search(r"^#{1,6}\s+(.+)", content, re.MULTILINE)
     title = match.group(1).strip()[:200] if match else os.path.splitext(os.path.basename(file_path))[0].replace("-", " ").replace("_", " ").title()
 
     from datetime import datetime, timezone
@@ -105,7 +105,7 @@ def _update_context(context_id: str, file_path: str, content: str, session_id: s
     import re
     from datetime import datetime, timezone
 
-    match = re.search(r"^#\s+(.+)", content, re.MULTILINE)
+    match = re.search(r"^#{1,6}\s+(.+)", content, re.MULTILINE)
     title = match.group(1).strip()[:200] if match else None
 
     payload: dict = {
