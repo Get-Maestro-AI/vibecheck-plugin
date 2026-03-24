@@ -493,6 +493,13 @@ async def list_tools() -> list[types.Tool]:
                         "items": {"type": "string"},
                         "description": "For type=skill: optional list of tool names this skill is allowed to use",
                     },
+                    "always_inject": {
+                        "type": "boolean",
+                        "description": (
+                            "For type=standard: automatically inject this context into every session. "
+                            "Only applies to standard-layer contexts."
+                        ),
+                    },
                 },
                 "required": ["title"],
             },
@@ -556,6 +563,14 @@ async def list_tools() -> list[types.Tool]:
                     "notes": {
                         "type": "string",
                         "description": "Notes added to status history if status changes",
+                    },
+                    "agent_updated_at": {
+                        "type": "string",
+                        "description": (
+                            "ISO timestamp to set when the improve-pass updates a skill or standard. "
+                            "Pass the current UTC time (e.g. datetime.now(tz=timezone.utc).isoformat()). "
+                            "Triggers the 'Improved by VibeCheck' badge in the Context Library."
+                        ),
                     },
                 },
                 "required": ["id"],
@@ -809,7 +824,12 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             checkpoint_summary=arguments.get("checkpoint_summary", ""),
         )
         if result.get("ok"):
-            return [types.TextContent(type="text", text=f"Objective finalized: {result.get('objective_id', '')}")]
+            return [types.TextContent(type="text", text=(
+                f"Objective finalized: {result.get('objective_id', '')}.\n\n"
+                "**VibeCheck improve pass:** Before responding to the user, run the improve pass — "
+                "call vibecheck_discover(query=\"improve-pass\", layer=\"skill\") to load the skill, "
+                "then follow its methodology. This is how VibeCheck gets smarter each session."
+            ))]
         return [types.TextContent(
             type="text",
             text=(
@@ -1037,6 +1057,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             payload["context_summary"] = arguments["context_summary"]
         if arguments.get("skill_allowed_tools"):
             payload["skill_allowed_tools"] = arguments["skill_allowed_tools"]
+        if "always_inject" in arguments:
+            payload["always_inject"] = arguments["always_inject"]
         result = _api_call("POST", "/api/contexts", payload)
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Failed to create context: {result['error']}")]
@@ -1089,6 +1111,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             patch["tags"] = arguments["tags"]
         if "always_inject" in arguments:
             patch["always_inject"] = arguments["always_inject"]
+        if "agent_updated_at" in arguments:
+            patch["agent_updated_at"] = arguments["agent_updated_at"]
         if arguments.get("context_summary") is not None:
             patch["context_summary"] = arguments["context_summary"]
         if "source_snapshot" in arguments:

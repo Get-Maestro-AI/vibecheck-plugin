@@ -194,9 +194,14 @@ def _run(hook_data: dict) -> None:
 
     context_type, confidence = classification
 
+    # Use absolute path as manifest key for files outside the project tree
+    # (e.g. ~/.claude/plans/). Relative paths with leading "../" are fragile
+    # across sessions with different CWDs.
+    manifest_key = file_path if rel_path.startswith("..") else rel_path
+
     # Check manifest
     manifest = read_manifest(cwd)
-    entry = get_entry(manifest, rel_path)
+    entry = get_entry(manifest, manifest_key)
     current_hash = content_hash(content)
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -227,10 +232,10 @@ def _run(hook_data: dict) -> None:
 
         if resp:
             label = resp.get("label", context_label)
-            set_entry(manifest, rel_path, context_id, label, current_hash, context_type, session_id)
+            set_entry(manifest, manifest_key, context_id, label, current_hash, context_type, session_id)
             write_manifest(cwd, manifest)
-            print(f"[VibeCheck] Artifact updated: [{context_type}] \"{title}\" ({label})")
-            print(f"  → {frontend_url}/#context/{label}")
+            print(f"\n[VibeCheck] Artifact updated: [{context_type}] \"{title}\" ({label})")
+            print(f"  → {frontend_url}/#context/{label}\n")
         else:
             log_hook_issue("capture_artifact", f"Failed to update context {context_id} for {rel_path}")
 
@@ -256,10 +261,10 @@ def _run(hook_data: dict) -> None:
         if resp:
             context_id = resp.get("id", "")
             label = resp.get("label", "")
-            set_entry(manifest, rel_path, context_id, label, current_hash, context_type, session_id)
+            set_entry(manifest, manifest_key, context_id, label, current_hash, context_type, session_id)
             write_manifest(cwd, manifest)
-            print(f"[VibeCheck] Artifact captured: [{context_type}] \"{title}\" ({label})")
-            print(f"  → {frontend_url}/#context/{label}")
+            print(f"\n[VibeCheck] Artifact captured: [{context_type}] \"{title}\" ({label})")
+            print(f"  → {frontend_url}/#context/{label}\n")
         else:
             log_hook_issue("capture_artifact", f"Failed to create context for {rel_path}")
 
