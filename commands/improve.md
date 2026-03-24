@@ -9,38 +9,7 @@ You will run the VibeCheck improve pass, which refines skill methodology based o
 
 ---
 
-## Phase 1 — Dedup check (automatic trigger only)
-
-If this was triggered automatically by `vibecheck_finalize_objective` (not by the user running `/vibecheck:improve`), check the session dedup cache:
-
-```bash
-_DEDUP_FILE="$HOME/.vibecheck/improve_run.json"
-_SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
-
-if [ -f "$_DEDUP_FILE" ]; then
-  python3 -c "
-import json, sys
-try:
-    cache = json.load(open('$_DEDUP_FILE'))
-    if cache.get('$_SESSION_ID', {}).get('completed'):
-        print('DEDUP_HIT')
-        sys.exit(0)
-except: pass
-print('DEDUP_MISS')
-"
-else
-  echo "DEDUP_MISS"
-fi
-```
-
-- If `DEDUP_HIT`: print "Improve pass already ran this session." and stop.
-- If `DEDUP_MISS`: continue.
-
-**If the user explicitly ran `/vibecheck:improve`, skip this check entirely** — explicit user intent always runs.
-
----
-
-## Phase 2 — Discover and load improve specialists
+## Phase 1 — Discover and load improve specialists
 
 ```
 vibecheck_discover(query="improve skill methodology", layer="skill", skill_type="improve", limit=4)
@@ -48,11 +17,13 @@ vibecheck_discover(query="improve skill methodology", layer="skill", skill_type=
 
 For each matched skill, call `vibecheck_get_context(id)` to load the full brief. The brief defines the methodology — follow it exactly.
 
+**Important:** This is a manual invocation. Tell each specialist to **skip the session dedup check** — explicit user intent always runs.
+
 If no skills are found, fall back to the built-in improve criteria below.
 
 ---
 
-## Phase 3 — Run improve specialists
+## Phase 2 — Run improve specialists
 
 For each loaded improve specialist, follow its methodology in full. The specialist scans for friction signals and refines skills as needed.
 
@@ -76,29 +47,5 @@ For each skill with clear friction:
 - Rewrite skills speculatively
 
 ---
-
-## Phase 4 — Record dedup and output
-
-After the pass completes, write the dedup marker:
-
-```bash
-_DEDUP_FILE="$HOME/.vibecheck/improve_run.json"
-_SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
-mkdir -p "$(dirname "$_DEDUP_FILE")"
-python3 -c "
-import json, os
-from datetime import datetime, timezone
-path = '$_DEDUP_FILE'
-try:
-    cache = json.load(open(path))
-except: cache = {}
-cache['$_SESSION_ID'] = {'completed': True, 'at': datetime.now(timezone.utc).isoformat()}
-# Prune entries older than 24h
-from time import time
-cutoff = time() - 86400
-cache = {k: v for k, v in cache.items() if not isinstance(v, dict) or v.get('at', '') > datetime.fromtimestamp(cutoff, tz=timezone.utc).isoformat()}
-json.dump(cache, open(path, 'w'))
-"
-```
 
 Then respond to the user normally.
