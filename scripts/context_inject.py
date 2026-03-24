@@ -66,6 +66,41 @@ _TASK_INTENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Correction signal detection (SPEC-322) ───────────────────────────────────
+# Patterns that indicate the user is correcting a convention or preference.
+# Deliberately specific to avoid false positives on casual phrases like
+# "never mind" or "don't worry about it".
+_CORRECTION_PATTERNS = [
+    # "I don't use X" / "we don't use X"
+    re.compile(r"\b(?:I|we)\s+don'?t\s+use\b", re.IGNORECASE),
+    # "never use/run/call/execute/do/write/commit X"
+    re.compile(
+        r"\bnever\s+(?:use|run|call|execute|do|write|apply|add|push|deploy|commit)\b",
+        re.IGNORECASE,
+    ),
+    # "always use X"
+    re.compile(r"\balways\s+use\b", re.IGNORECASE),
+    # "we always use/run/do X"
+    re.compile(
+        r"\bwe\s+always\s+(?:use|run|do|write|call|prefer|go\s+with)\b",
+        re.IGNORECASE,
+    ),
+    # "I've told you" / "I've said this" / "I've mentioned this" / "I've already said"
+    re.compile(
+        r"\bI'?ve\s+(?:told\s+you|said\s+this|mentioned\s+this|already\s+said)\b",
+        re.IGNORECASE,
+    ),
+    # "stop using/running/calling X"
+    re.compile(r"\bstop\s+(?:using|running|calling|doing)\b", re.IGNORECASE),
+    # "use X, not Y" / "use X not Y"
+    re.compile(r"\buse\s+\w[\w\s]{0,20},?\s+not\b", re.IGNORECASE),
+    # "don't use/run/call/execute/commit X"
+    re.compile(
+        r"\bdon'?t\s+(?:use|run|call|execute|push|commit|write)\b",
+        re.IGNORECASE,
+    ),
+]
+
 # Two-pass discovery limits.
 _SKILL_LIMIT = 3
 _GENERAL_LIMIT = 2
@@ -334,6 +369,78 @@ def _check_workflow_nudge(
     return message
 
 
+def _check_correction_signal(prompt: str) -> tuple[str, str] | None:
+    """Return (matched_phrase, topic_context) if the prompt contains a convention correction.
+
+    Pure regex — no I/O, no network calls.
+    - matched_phrase: the pattern that fired (e.g. "I don't use")
+    - topic_context: up to 60 chars following the match (contains the actual topic word)
+    Returns None if no correction pattern is detected.
+    """
+    for pattern in _CORRECTION_PATTERNS:
+        m = pattern.search(prompt)
+        if m:
+            topic_context = prompt[m.start():m.end() + 60]
+            return (m.group(0), topic_context)
+    return None
+
+
+def _correction_already_covered(
+    signal_phrase: str, topic_context: str, api_url: str, auth_headers: dict
+) -> bool:
+    """Return True if the correction topic is already covered by an always-inject standard.
+
+    Fetches /api/contexts/standards once (only called when a signal is detected)
+    and checks for keyword overlap between the topic context and existing standard
+    titles/summaries. Returns False on any error so the nudge is not silently dropped.
+    """
+    try:
+        url = f"{api_url}/api/contexts/standards"
+        req = urllib_request.Request(
+            url,
+            headers={"Accept": "application/json", **auth_headers},
+        )
+        with urllib_request.urlopen(req, timeout=_PLAN_SUGGESTION_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        # Only check user/agent-created standards — not system-seeded review criteria
+        # (e.g. "No Tokens Left in Code"). Built-in standards cover review concerns,
+        # not user conventions, and their generic titles produce false dedup matches.
+        standards = [
+            s for s in data.get("standards", [])
+            if s.get("always_inject") and s.get("created_by") != "system"
+        ]
+        if not standards:
+            return False
+
+        # Extract topic words from the broader context (signal phrase + following text).
+        # Ignore common stop-words so we match on the actual subject (e.g. "bash", "zsh").
+        _STOP = {
+            "i", "we", "don't", "dont", "never", "always", "use", "run", "call",
+            "do", "stop", "using", "not", "told", "you", "said", "this", "ve",
+            "ive", "already", "a", "an", "the", "and", "or", "to", "for", "of",
+            "in", "on", "at", "is", "it", "with", "that", "my", "our", "your",
+        }
+        topic_words = {
+            w.lower()
+            for w in re.findall(r"\w+", topic_context)
+            if w.lower() not in _STOP and len(w) > 2
+        }
+
+        for std in standards:
+            title_words = {w.lower() for w in re.findall(r"\w+", std.get("title", ""))}
+            summary_words = {
+                w.lower()
+                for w in re.findall(r"\w+", std.get("context_summary", "") or "")
+            }
+            all_words = title_words | summary_words
+            if topic_words and topic_words & all_words:
+                return True
+    except Exception:
+        pass
+    return False
+
+
 def main() -> None:
     try:
         hook_data = json.load(sys.stdin)
@@ -398,6 +505,25 @@ def main() -> None:
         except Exception:
             pass
 
+    # ── Correction signal detection (SPEC-322) ───────────────────────────
+    # Detects convention corrections in the user's message (e.g. "I don't use bash")
+    # and injects a nudge to capture the convention before it expires.
+    correction_nudge: str | None = None
+    try:
+        _signal = _check_correction_signal(prompt)
+        if _signal and not _correction_already_covered(_signal[0], _signal[1], api_url, auth_headers):
+            correction_nudge = (
+                "[VibeCheck] Correction signal detected. If this states a codebase convention,\n"
+                "capture it before responding:\n"
+                "  vibecheck_create_context(type=\"standard\", always_inject=True,\n"
+                "    title=\"<convention in ~5 words>\",\n"
+                "    brief=\"<when and how to apply it>\",\n"
+                "    context_summary=\"<one sentence: when this rule applies>\")\n"
+                "Then respond to the user normally."
+            )
+    except Exception:
+        pass
+
     # ── Phase 5: Two-pass discovery ──────────────────────────────────────
     # Pass 1: Skills — "What should I do?"
     # Pass 2: General — "What should I know?" (excluding skills from pass 1)
@@ -425,9 +551,13 @@ def main() -> None:
     general = general[:_GENERAL_LIMIT]
 
     contexts = skills + general
-    if not contexts and not plan_suggestion and not workflow_nudge:
+    if not contexts and not plan_suggestion and not workflow_nudge and not correction_nudge:
         sys.exit(0)
 
+    if correction_nudge:
+        print(correction_nudge)
+        if contexts or plan_suggestion or workflow_nudge:
+            print()
     if plan_suggestion:
         print(plan_suggestion)
         if contexts:
@@ -441,7 +571,7 @@ def main() -> None:
 
     # Standing dedup instruction — always emit when any output was shown,
     # so Claude knows file-written artifacts are captured automatically.
-    if contexts or plan_suggestion or workflow_nudge:
+    if contexts or plan_suggestion or workflow_nudge or correction_nudge:
         print(
             "\n[VibeCheck] File-written artifacts (specs, plans, design docs) are "
             "automatically captured. Only use vibecheck_create_context for decisions, "
