@@ -350,6 +350,8 @@ def upsert_hook(event_name, identity, command, options, matcher=None):
                 group["hooks"][i] = entry
                 if matcher:
                     group["matcher"] = matcher
+                else:
+                    group.pop("matcher", None)
                 settings["hooks"][event_name] = existing
                 return
 

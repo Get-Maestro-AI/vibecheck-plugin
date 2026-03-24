@@ -237,6 +237,8 @@ Call `EnterPlanMode` with the planning brief as the scaffolding content. The use
 
 When the user approves the plan, **before calling ExitPlanMode**:
 
+**Extract structured fields from the approved plan.** The user built the plan interactively in plan mode — parse their approved plan text to populate the payload fields below. Extract steps as an ordered array, pull out any acceptance criteria and risks, and identify out-of-scope items. If a field isn't present in the plan text, omit it or pass an empty array.
+
 1. Save to the Context Library:
 
 ```
@@ -290,7 +292,9 @@ JSON payload:
 
 4. Call `ExitPlanMode`.
 
-**If VibeCheck is unreachable**, skip the POST but still save to the Context Library and report the PLN-* label before calling `ExitPlanMode`.
+**If the POST endpoint fails but MCP is available**, skip the POST, save via `vibecheck_create_context`, report the PLN-* label, and call `ExitPlanMode`.
+
+**If VibeCheck is entirely unreachable (both MCP and REST)**, skip both saves, note to the user that the plan was not persisted, and still call `ExitPlanMode`.
 
 ### Resolve on completion
 
