@@ -209,7 +209,7 @@ def _run(hook_data: dict) -> None:
     stale_keys = [k for k in manifest.get("artifacts", {}) if k.startswith("..")]
     if stale_keys:
         for old_key in stale_keys:
-            abs_key = str(Path(cwd) / old_key)
+            abs_key = str((Path(cwd) / old_key).resolve())
             manifest["artifacts"][abs_key] = manifest["artifacts"].pop(old_key)
         write_manifest(cwd, manifest)
 
