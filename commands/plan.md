@@ -239,12 +239,14 @@ When the user approves the plan, **before calling ExitPlanMode**:
 
 **Extract structured fields from the approved plan.** The user built the plan interactively in plan mode — parse their approved plan text to populate the payload fields below. Extract steps as an ordered array, pull out any acceptance criteria and risks, and identify out-of-scope items. If a field isn't present in the plan text, omit it or pass an empty array.
 
-1. Save to the Context Library:
+1. **Extract the plan title** from the plan's first `##` heading (e.g., `## Plan: Self-Improvement Loop v2` → title is `"Plan: Self-Improvement Loop v2"`). This is the canonical title — do NOT use the Claude Code plan filename (e.g., "valiant-enchanting-globe") as the title.
+
+2. Save to the Context Library:
 
 ```
 vibecheck_create_context(
     type="plan",
-    title="Plan: <objective title> (<today's date>)",
+    title="<title from the plan's first ## heading>",
     context_summary="<one sentence: what this plan is for>",
     tags=["plan", "<plan-type>"],
     brief=<full plan markdown>,
@@ -252,7 +254,7 @@ vibecheck_create_context(
 )
 ```
 
-2. POST to VibeCheck:
+3. POST to VibeCheck:
 
 ```bash
 _VC_CONF="$HOME/.config/vibecheck/config"
@@ -288,13 +290,15 @@ JSON payload:
 }
 ```
 
-3. Report the plan label to the user: **"Plan saved as PLN-XX."**
+4. Report the plan label to the user: **"Plan saved as PLN-XX."** Include the Claude Code plan file reference for cross-referencing (e.g., "Claude Code plan ref: valiant-enchanting-globe").
 
-4. Call `ExitPlanMode`.
+5. Call `ExitPlanMode`.
 
 **If the POST endpoint fails but MCP is available**, skip the POST, save via `vibecheck_create_context`, report the PLN-* label, and call `ExitPlanMode`.
 
 **If VibeCheck is entirely unreachable (both MCP and REST)**, skip both saves, note to the user that the plan was not persisted, and still call `ExitPlanMode`.
+
+> **Title rule:** The plan title must come from the plan content (the first `##` heading), never from the Claude Code plan filename. The filename is a random slug (e.g., "valiant-enchanting-globe") used internally by Claude Code — it is not meaningful to the user.
 
 ### Resolve on completion
 
