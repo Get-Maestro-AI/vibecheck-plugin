@@ -60,6 +60,10 @@ _PLAN_SUGGESTION_CACHE = Path.home() / ".vibecheck" / "plan_suggested.json"
 # Local cache file: records session IDs that have already received a workflow nudge.
 _WORKFLOW_NUDGE_CACHE = Path.home() / ".vibecheck" / "workflow_nudged.json"
 
+# Pending echoes from capture_artifact.py — PostToolUse stdout isn't reliably
+# visible to the user, so we relay stashed echoes on the next UserPromptSubmit.
+_PENDING_ECHOES = Path.home() / ".vibecheck" / ".pending_echoes"
+
 # Regex matching action-verb prompts that signal "I'm about to build something".
 _TASK_INTENT_RE = re.compile(
     r"^\s*(build|add|implement|create|make|write|fix|refactor)\b",
@@ -451,6 +455,17 @@ def main() -> None:
     prompt = (hook_data.get("prompt") or "").strip()
     session_id = (hook_data.get("session_id") or "").strip()
     cwd = (hook_data.get("cwd") or "").strip()
+
+    # Flush pending artifact capture echoes from PostToolUse hooks.
+    try:
+        if _PENDING_ECHOES.exists():
+            echoes = _PENDING_ECHOES.read_text(encoding="utf-8").strip()
+            if echoes:
+                print(echoes)
+                print()
+            _PENDING_ECHOES.unlink(missing_ok=True)
+    except Exception:
+        pass
 
     if _should_skip(prompt):
         sys.exit(0)

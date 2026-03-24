@@ -34,6 +34,21 @@ from lib.manifest import (  # type: ignore[import]
     write_manifest,
 )
 
+# Pending echoes file — read and flushed by context_inject.py on UserPromptSubmit.
+# PostToolUse hook stdout is not reliably visible to the user, so we stash echoes
+# here for relay on the next user prompt.
+_PENDING_ECHOES = Path.home() / ".vibecheck" / ".pending_echoes"
+
+
+def _write_pending_echo(message: str) -> None:
+    """Append an echo message for relay by context_inject.py."""
+    try:
+        _PENDING_ECHOES.parent.mkdir(parents=True, exist_ok=True)
+        with open(_PENDING_ECHOES, "a", encoding="utf-8") as f:
+            f.write(message + "\n")
+    except Exception:
+        pass
+
 
 def _extract_title(content: str, file_path: str) -> str:
     """Extract title from first markdown heading, fallback to filename."""
@@ -246,8 +261,9 @@ def _run(hook_data: dict) -> None:
             label = resp.get("label", context_label)
             set_entry(manifest, manifest_key, context_id, label, current_hash, context_type, session_id)
             write_manifest(cwd, manifest)
-            print(f"\n[VibeCheck] Artifact updated: [{context_type}] \"{title}\" ({label})")
-            print(f"  → {frontend_url}/#context/{label}\n")
+            echo = f"[VibeCheck] Artifact updated: [{context_type}] \"{title}\" ({label})\n  → {frontend_url}/#context/{label}"
+            print(f"\n{echo}\n")
+            _write_pending_echo(echo)
         else:
             log_hook_issue("capture_artifact", f"Failed to update context {context_id} for {manifest_key}")
 
@@ -275,8 +291,9 @@ def _run(hook_data: dict) -> None:
             label = resp.get("label", "")
             set_entry(manifest, manifest_key, context_id, label, current_hash, context_type, session_id)
             write_manifest(cwd, manifest)
-            print(f"\n[VibeCheck] Artifact captured: [{context_type}] \"{title}\" ({label})")
-            print(f"  → {frontend_url}/#context/{label}\n")
+            echo = f"[VibeCheck] Artifact captured: [{context_type}] \"{title}\" ({label})\n  → {frontend_url}/#context/{label}"
+            print(f"\n{echo}\n")
+            _write_pending_echo(echo)
         else:
             log_hook_issue("capture_artifact", f"Failed to create context for {manifest_key}")
 
