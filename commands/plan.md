@@ -196,40 +196,61 @@ Do not fall through to the Built-in Methodologies section. SKL-178 is the floor.
 
 ---
 
-## Phase 3 — Execute plan, save, and enter plan mode
+## Phase 3 — Generate planning brief and enter plan mode
 
-### Executing the plan
+### Generating the planning brief
 
-If a saved plan was found and the user wants to resume: load it, summarise remaining steps, and proceed directly to `EnterPlanMode` with the remaining steps highlighted.
+**The specialist's job is to set up the planning session, not write the plan.**
 
-Otherwise, run the specialist methodology (or built-in fallback) to produce a structured plan in this exact format:
+Run the specialist methodology from Phase 2. Instead of producing a finished structured plan, produce a **planning brief** in this format:
+
+> **Note:** Ignore the specialist skill's output format section — the skill informs the brief's Context and Approach, but the output format below replaces it entirely.
 
 ```markdown
-## Plan: <title>
+## Planning Brief: <title>
 
-**Type:** <plan-type> | **Skill:** <skill-name or "built-in"> | **Objective:** <objective title or ID>
+**Type:** <plan-type> | **Spec:** <SPEC-id if available>
 
-### Goal
-One sentence: what success looks like when this plan is complete.
+### Context
+What we're building and why. Key background the plan should account for.
 
-### Steps
-1. <step> — <why / what to watch for>
-2. <step> — <why / what to watch for>
-(3–8 steps maximum. Each step must be independently verifiable.)
+### Approach
+Recommended planning direction — where to start, what to sequence first.
 
-### Risks & Unknowns
-- <risk or unknown that could derail this plan>
+### Key questions to resolve in this plan
+- [question the plan needs to answer]
 
-### Acceptance Criteria
-- [ ] <concrete, testable condition>
+### Risks to address
+- [risk the plan should mitigate or call out]
 
-### Out of Scope
-- <what we are explicitly NOT doing in this plan>
+### Files in scope
+- [relevant files from Phase 1]
 ```
 
-### Save the plan to VibeCheck
+**If a saved plan was found** and the user wants to resume: load it with `vibecheck_get_context`, summarise the remaining steps, and call `EnterPlanMode` with the remaining steps as content.
 
-After generating the plan, POST it to VibeCheck:
+### Entering plan mode
+
+Call `EnterPlanMode` with the planning brief as the scaffolding content. The user generates the implementation plan interactively in plan mode.
+
+### Post-approval: save and exit
+
+When the user approves the plan, **before calling ExitPlanMode**:
+
+1. Save to the Context Library:
+
+```
+vibecheck_create_context(
+    type="plan",
+    title="Plan: <objective title> (<today's date>)",
+    context_summary="<one sentence: what this plan is for>",
+    tags=["plan", "<plan-type>"],
+    brief=<full plan markdown>,
+    predecessor_id=<active_spec_id or objective_id if available>
+)
+```
+
+2. POST to VibeCheck:
 
 ```bash
 _VC_CONF="$HOME/.config/vibecheck/config"
@@ -242,14 +263,14 @@ _AUTH_ARGS=()
 curl -s -X POST "$_VC_URL/api/push/vc-plan" \
   -H "Content-Type: application/json" \
   "${_AUTH_ARGS[@]}" \
-  -d '<YOUR_JSON_PAYLOAD>'
+  -d '<JSON payload>'
 ```
 
-JSON payload structure:
+JSON payload:
 ```json
 {
-  "session_id": "!`echo ${CLAUDE_SESSION_ID:-unknown}`",
-  "cwd": "!`pwd`",
+  "session_id": "${CLAUDE_SESSION_ID:-unknown}",
+  "cwd": "<current working directory>",
   "objective_id": "<objective_id from Phase 1, or empty>",
   "spec_id": "<active_spec_id from Phase 1, or empty>",
   "plan_type": "<plan-type>",
@@ -265,30 +286,21 @@ JSON payload structure:
 }
 ```
 
-### Save to the Context Library
+3. Report the plan label to the user: **"Plan saved as PLN-XX."**
 
-After POSTing to `/api/push/vc-plan`, also write the plan to the Context Library:
+4. Call `ExitPlanMode`.
 
-```
-vibecheck_create_context(
-    type="plan",
-    title="Plan: <objective title> (<today's date>)",
-    context_summary="<one sentence: what this plan is for>",
-    tags=["plan", "<plan-type>"],
-    brief=<full plan markdown>,
-    predecessor_id=<active_spec_id or objective_id if available>
-)
-```
+**If VibeCheck is unreachable**, skip the POST but still save to the Context Library and report the PLN-* label before calling `ExitPlanMode`.
 
-### Enter plan mode
+### Resolve on completion
 
-Finally, call `EnterPlanMode` with the structured plan as the content for user review and approval. The user will review the plan and either approve it (proceeding to implementation) or request changes.
-
-**If VibeCheck is unreachable**, present the plan to the user and proceed to `EnterPlanMode` without saving — note that the plan was not persisted.
+After the implementation of this plan is complete, call `vibecheck_resolve` on both the spec ID (if active) and the plan ID (PLN-*).
 
 ---
 
 ## Built-in Methodologies (fallback when no skill is loaded)
+
+> **Note:** These describe the methodology to gather context — use them to inform the planning brief's Context, Approach, and Risks sections. Do NOT produce a full plan from them; output only the planning brief format defined in Phase 3 above.
 
 ### feature-plan
 Start from acceptance criteria → identify data model changes → list API/service layer changes → list UI changes → identify integration points and risks → draft 4–6 ordered steps.

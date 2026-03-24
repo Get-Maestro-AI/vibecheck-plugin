@@ -261,6 +261,12 @@ OUR_HOOKS = {
             "command": f"{python_exe} {scripts_dir}/push_event.py",
             "options": {"async": True},
         },
+        {
+            "identity": "[VibeCheck] Plan mode exited",
+            "command": "echo '[VibeCheck] Plan mode exited. If the plan was not saved to VibeCheck, save it now using vibecheck_create_context(type=plan) and POST to /api/push/vc-plan before proceeding.'",
+            "options": {},
+            "matcher": "ExitPlanMode",
+        },
     ],
     "PostToolUseFailure": [
         {
@@ -324,12 +330,15 @@ except (FileNotFoundError, json.JSONDecodeError):
 
 settings.setdefault("hooks", {})
 
-def upsert_hook(event_name, identity, command, options):
+def upsert_hook(event_name, identity, command, options, matcher=None):
     """Add or update a single hook for an event.
 
     Matches by identity substring — replaces the entire hook entry in place
     if found (handles message/option changes cleanly), appends a new group
     if not. Never duplicates. Never touches unrelated hooks.
+
+    If matcher is provided, the hook group will include a "matcher" key so
+    the hook only fires when the tool name matches (e.g. "ExitPlanMode").
     """
     existing = settings["hooks"].get(event_name, [])
     entry = {"type": "command", "command": command, **options}
@@ -339,16 +348,21 @@ def upsert_hook(event_name, identity, command, options):
             if identity in h.get("command", ""):
                 # Replace in place so option changes (async, timeout) take effect.
                 group["hooks"][i] = entry
+                if matcher:
+                    group["matcher"] = matcher
                 settings["hooks"][event_name] = existing
                 return
 
     # Not found — append a new group.
-    existing.append({"hooks": [entry]})
+    new_group = {"hooks": [entry]}
+    if matcher:
+        new_group["matcher"] = matcher
+    existing.append(new_group)
     settings["hooks"][event_name] = existing
 
 for event_name, hooks in OUR_HOOKS.items():
     for hook in hooks:
-        upsert_hook(event_name, hook["identity"], hook["command"], hook["options"])
+        upsert_hook(event_name, hook["identity"], hook["command"], hook["options"], hook.get("matcher"))
 
 with open(settings_file, "w") as f:
     json.dump(settings, f, indent=2)
@@ -361,7 +375,7 @@ ok "Hooks registered in $SETTINGS_FILE"
 ok "  SessionStart      → health_check, session_baseline, push_event"
 ok "  UserPromptSubmit  → context_inject, push_event"
 ok "  PreToolUse        → push_event"
-ok "  PostToolUse       → push_event"
+ok "  PostToolUse       → push_event, ExitPlanMode save-reminder"
 ok "  PostToolUseFailure→ push_event"
 ok "  SubagentStart/Stop→ push_event"
 ok "  Stop              → push_turn, push_event"

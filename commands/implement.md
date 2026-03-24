@@ -83,4 +83,5 @@ Execute the plan step by step, in order. For each step:
 **Step 5 — Complete**
 When implementation is done:
 1. Call `vibecheck_resolve` with the spec ID to mark it implemented
-2. Run `/vibecheck:review` to review changes before committing
+2. If a PLN-* plan was used, call `vibecheck_resolve` with the plan ID to mark it complete
+3. Run `/vibecheck:review` to review changes before committing
