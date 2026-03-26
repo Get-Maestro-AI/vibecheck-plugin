@@ -62,6 +62,7 @@ def main() -> None:
     git_status = run(["git", "status", "--short"], cwd)
     git_log = run(["git", "log", "--oneline", "-10"], cwd)
     git_remote = run(["git", "remote", "get-url", "origin"], cwd)
+    git_root = run(["git", "rev-parse", "--show-toplevel"], cwd)
 
     # Uncommitted file count
     total_uncommitted = len([line for line in git_status.splitlines() if line.strip()])
@@ -100,6 +101,7 @@ def main() -> None:
         "git_status": git_status[:2000],
         "git_log": git_log[:2000],
         "git_remote": git_remote,
+        "git_root": git_root,
         "directory_listing": directory_listing,
         "package_json": package_json,
         "pyproject_toml": pyproject_toml,
