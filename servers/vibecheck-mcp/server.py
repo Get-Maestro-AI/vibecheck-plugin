@@ -762,6 +762,51 @@ async def list_tools() -> list[types.Tool]:
                 },
             },
         ),
+        # ── shape conversation tools ──────────────────────────────────────
+        types.Tool(
+            name="vibecheck_shape_message",
+            description=(
+                "Persist a single turn in a shape conversation. The server stores the "
+                "message — it does NOT generate a response. Claude is the reasoning engine; "
+                "this tool is for persistence only."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Context ID (UUID or label like SPEC-42)",
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": ["user", "assistant"],
+                        "description": "Who said this turn",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The message content",
+                    },
+                },
+                "required": ["id", "role", "content"],
+            },
+        ),
+        types.Tool(
+            name="vibecheck_shape_clear",
+            description=(
+                "Clear the shape conversation on a context, resetting it to empty. "
+                "The context brief is not affected."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Context ID (UUID or label like SPEC-42)",
+                    },
+                },
+                "required": ["id"],
+            },
+        ),
     ]
 
 
@@ -1336,6 +1381,28 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             )
         lines.append(f"\n---\nWhen implementation is complete, call `vibecheck_resolve` with `id=\"{resolve_id}\"` to mark this spec as implemented.")
         return [types.TextContent(type="text", text="\n".join(lines))]
+
+    # ── Shape conversation tools ──────────────────────────────────────────────
+
+    if name == "vibecheck_shape_message":
+        ctx_id = arguments.get("id", "")
+        role = arguments.get("role", "")
+        content = arguments.get("content", "")
+        result = _api_call("POST", f"/api/contexts/{url_quote(ctx_id, safe='')}/shape/message", {
+            "role": role,
+            "content": content,
+        })
+        if result.get("error"):
+            return [types.TextContent(type="text", text=f"Failed to log shape message: {result['error']}")]
+        turn_count = len(result.get("conversation", [])) if isinstance(result, dict) else "?"
+        return [types.TextContent(type="text", text=f"Shape turn logged ({role}). Conversation now has {turn_count} turns.")]
+
+    if name == "vibecheck_shape_clear":
+        ctx_id = arguments.get("id", "")
+        result = _api_call("DELETE", f"/api/contexts/{url_quote(ctx_id, safe='')}/shape")
+        if result.get("error"):
+            return [types.TextContent(type="text", text=f"Failed to clear shape conversation: {result['error']}")]
+        return [types.TextContent(type="text", text=f"Shape conversation cleared for {ctx_id}.")]
 
     # ── Existing tools ────────────────────────────────────────────────────────
 

@@ -1,6 +1,5 @@
 ---
 description: Post a progress checkpoint to the VibeCheck dashboard
-allowed-tools: Bash
 ---
 
 Submit a `vibecheck_update` status checkpoint for the current project.
@@ -20,67 +19,22 @@ Example:
    - If JSON parsing fails, report "Invalid JSON" and show the expected shape.
    - If `status_label` or `summary` is missing, stop and report the missing field.
 
-2. Submit update to VibeCheck:
+2. Parse the JSON from `$ARGUMENTS` and call the MCP tool with the extracted fields:
 
-```bash
-PAYLOAD=$(python3 - <<'PY'
-import json
-import os
-import sys
-import uuid
-
-raw = """$ARGUMENTS""".strip()
-if not raw:
-    print("ERROR: missing arguments")
-    sys.exit(2)
-
-try:
-    data = json.loads(raw)
-except Exception:
-    print("ERROR: invalid JSON")
-    sys.exit(2)
-
-status = (data.get("status_label") or "").strip()
-summary = (data.get("summary") or "").strip()
-if not status:
-    print("ERROR: missing status_label")
-    sys.exit(2)
-if not summary:
-    print("ERROR: missing summary")
-    sys.exit(2)
-
-payload = {
-    "session_id": os.environ.get("CLAUDE_SESSION_ID", "unknown"),
-    "cwd": os.getcwd(),
-    "event_uuid": str(uuid.uuid4()),
-    "report_type": "checkpoint",
-    "status_label": status,
-    "summary": summary,
-    "current_task": data.get("current_task", ""),
-    "completed_subtasks": data.get("completed_subtasks", []),
-    "files_modified": data.get("files_modified", []),
-    "confidence": data.get("confidence", ""),
-    "next_step": data.get("next_step", ""),
-}
-print(json.dumps(payload))
-PY
+```
+vibecheck_update(
+  status_label="<status_label>",
+  summary="<summary>",
+  current_task="<current_task if provided>",
+  completed_subtasks=["<subtask1>", ...],
+  files_modified=["<file1>", ...],
+  confidence="<confidence if provided>",
+  next_step="<next_step if provided>"
 )
-
-_VC_CONF="$HOME/.config/vibecheck/config"
-_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
-_AUTH_ARGS=()
-[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
-
-curl -s -X POST "$_VC_URL/api/push/mcp-report" \
-  -H "Content-Type: application/json" \
-  "${_AUTH_ARGS[@]}" \
-  -d "$PAYLOAD"
 ```
 
 3. Report outcome:
-   - If response contains `"ok": true`, confirm update posted.
+   - If the tool succeeds, confirm update posted.
    - If VibeCheck is unreachable, report that update was not saved.
    - If `status_label` is `"done"` and response indicates blocked completion, surface the reason and next action.
 

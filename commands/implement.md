@@ -1,6 +1,6 @@
 ---
 description: Begin implementing a spec from the Context Library (e.g. /vibecheck:implement SPEC-4)
-allowed-tools: Bash, Read, Grep, Glob, Edit, Write
+allowed-tools: Read, Grep, Glob, Edit, Write
 ---
 
 Begin implementing **$ARGUMENTS** from the VibeCheck Context Library.
@@ -38,15 +38,8 @@ Read the spec brief completely (already loaded via `vibecheck_implement`). Note:
 **Step 2 — Check for an existing plan**
 Look up any active plan linked to this spec:
 
-```bash
-_VC_CONF="$HOME/.config/vibecheck/config"
-_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
-_AUTH_ARGS=()
-[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
-
-curl -s "$_VC_URL/api/plans?spec_id=$ARGUMENTS&status=active" "${_AUTH_ARGS[@]}" | python3 -m json.tool
+```
+vibecheck_discover(query="plan for $ARGUMENTS", layer="work", type="plan", limit=3)
 ```
 
 **If a plan is found:**

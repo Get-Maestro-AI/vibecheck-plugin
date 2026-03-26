@@ -1,6 +1,5 @@
 ---
 description: Start an interactive shaping conversation to develop a context (e.g. spec, decision)
-allowed-tools: Bash
 ---
 
 Shape a VibeCheck context through an interactive conversation.
@@ -18,7 +17,7 @@ Shape a VibeCheck context through an interactive conversation.
 2. **Restart intent:** Does the input contain "start over", "restart", "fresh",
    "from scratch", or similar? If yes AND a prior shape_conversation exists on the
    context, confirm once: "You have a prior shaping conversation. Start over?".
-   If confirmed, call DELETE /{context_id}/shape, then proceed with an empty conversation.
+   If confirmed, call `vibecheck_shape_clear(id="<context_id>")`, then proceed with an empty conversation.
 
 3. **Reachability check:** Call GET /api/status. If it fails, wait 2 seconds and retry once.
    If it fails again (connection refused, timeout, or error response):
@@ -46,7 +45,7 @@ Ask the user one question: "What do you want to shape?" Wait for their answer, t
 - User / problem / pain / persona / who-is-this-for → `product-specialist`
 - Ambiguous → ask ONE clarifying question: "Is this mainly about the design direction, the strategy/scope, or the user problem?"
 
-Once you know what the user wants to shape, create a spec context using the Path B curl snippet (using their answer as the title seed). Extract the context ID. Then load the sub-specialist and conduct the shaping conversation, logging all turns with the context ID.
+Once you know what the user wants to shape, create a spec context using the Path B `vibecheck_create_context` call (using their answer as the title seed). Extract the context ID. Then load the sub-specialist and conduct the shaping conversation, logging all turns with the context ID.
 
 **The anchor must exist before the first specialist question.**
 
@@ -58,21 +57,12 @@ Use the free-text as the seed topic. Route to sub-specialist using the same sign
 
 Then create a spec context to anchor the conversation:
 
-```bash
-_VC_CONF="$HOME/.config/vibecheck/config"
-_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
-_AUTH_ARGS=(); [ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
-
-_SHAPE_TITLE=$(python3 -c "import json,sys; print(json.dumps('Spec: ' + sys.argv[1]))" "$ARGUMENTS")
-_SHAPE_SUMMARY=$(python3 -c "import json,sys; print(json.dumps('Shaping: ' + sys.argv[1]))" "$ARGUMENTS")
-
-curl -s -X POST "$_VC_URL/api/contexts" \
-  -H "Content-Type: application/json" \
-  "${_AUTH_ARGS[@]}" \
-  -d "{\"title\": $_SHAPE_TITLE, \"type\": \"spec\", \"context_summary\": $_SHAPE_SUMMARY}" \
-  | python3 -m json.tool 2>/dev/null
+```
+vibecheck_create_context(
+  title="Spec: <seed topic>",
+  type="spec",
+  context_summary="Shaping: <seed topic>"
+)
 ```
 
 Extract the new context `id` from the response. Proceed with this context ID as the anchor. Conduct the shaping conversation using the loaded sub-specialist's methodology (see Step 3).
@@ -83,15 +73,8 @@ Extract the new context `id` from the response. Proceed with this context ID as 
 
 Resolve the context:
 
-```bash
-_VC_CONF="$HOME/.config/vibecheck/config"
-_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
-_AUTH_ARGS=(); [ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
-
-curl -s "${_AUTH_ARGS[@]}" "$_VC_URL/api/contexts/$ARGUMENTS" \
-  | python3 -m json.tool 2>/dev/null || echo '{"error":"Context not found or VibeCheck unreachable"}'
+```
+vibecheck_get_context(id="$ARGUMENTS")
 ```
 
 Read the context type and existing brief/conversation. Route to sub-specialist based on context type:
@@ -104,10 +87,10 @@ If the context has an existing `shape_conversation`, resume from where it left o
 
 **If the resolved context has `type=issue`:**
 1. Tell the user: "This is an issue — shaping it will produce a new spec. The issue will be linked as a predecessor."
-2. Create a new spec via POST /api/contexts with the issue title as seed and `predecessor_id` set to the issue's id.
+2. Create a new spec: `vibecheck_create_context(title="Spec: <issue title>", type="spec", predecessor_id="<issue_id>")`
 3. Extract the new spec's id. Proceed shaping the spec (not the issue).
 4. At the end of the conversation (Step 4), update the issue status to dispatched:
-   `POST /{issue_id}/status {"status": "dispatched"}`
+   `vibecheck_update_context(id="<issue_id>", status="dispatched")`
 
 ---
 
@@ -191,12 +174,8 @@ surface it: "Last time we said X — does that still stand?"
 
 Log each turn to VibeCheck for persistence:
 
-```bash
-# Log a turn (substitute _CTX_ID with context id, role with user/assistant, content with message)
-curl -s -X POST "$_VC_URL/api/contexts/$_CTX_ID/shape/message" \
-  -H "Content-Type: application/json" \
-  "${_AUTH_ARGS[@]}" \
-  -d "{\"role\": \"<role>\", \"content\": \"<content>\"}"
+```
+vibecheck_shape_message(id="<context_id>", role="<user|assistant>", content="<message content>")
 ```
 
 This is persistence-only — the server does NOT generate responses. You are the reasoning engine.
@@ -211,11 +190,8 @@ Continue until:
 
 When the conversation is complete, apply the shaped brief to the context:
 
-```bash
-curl -s -X PATCH "$_VC_URL/api/contexts/$_CTX_ID" \
-  -H "Content-Type: application/json" \
-  "${_AUTH_ARGS[@]}" \
-  -d "{\"brief_replace\": \"<full shaped brief markdown>\"}"
+```
+vibecheck_update_context(id="<context_id>", brief_replace="<full shaped brief markdown>")
 ```
 
 The applied brief must match the output of the sub-specialist's methodology exactly — do not summarize.

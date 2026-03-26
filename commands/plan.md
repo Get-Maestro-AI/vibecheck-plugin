@@ -254,49 +254,11 @@ vibecheck_create_context(
 )
 ```
 
-3. POST to VibeCheck:
+3. Report the plan label to the user: **"Plan saved as PLN-XX."** Include the Claude Code plan file reference for cross-referencing (e.g., "Claude Code plan ref: valiant-enchanting-globe").
 
-```bash
-_VC_CONF="$HOME/.config/vibecheck/config"
-_VC_KEY="${VIBECHECK_API_KEY:-$(grep '^api_key=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${VIBECHECK_API_URL:-$(grep '^api_url=' "$_VC_CONF" 2>/dev/null | cut -d= -f2-)}"
-_VC_URL="${_VC_URL%/}"; _VC_URL="${_VC_URL:-http://localhost:8420}"
-_AUTH_ARGS=()
-[ -n "$_VC_KEY" ] && _AUTH_ARGS=(-H "Authorization: Bearer $_VC_KEY")
+4. Call `ExitPlanMode`.
 
-curl -s -X POST "$_VC_URL/api/push/vc-plan" \
-  -H "Content-Type: application/json" \
-  "${_AUTH_ARGS[@]}" \
-  -d '<JSON payload>'
-```
-
-JSON payload:
-```json
-{
-  "session_id": "${CLAUDE_SESSION_ID:-unknown}",
-  "cwd": "<current working directory>",
-  "objective_id": "<objective_id from Phase 1, or empty>",
-  "spec_id": "<active_spec_id from Phase 1, or empty>",
-  "plan_type": "<plan-type>",
-  "skill_id": "<skill context ID if one was loaded, or empty>",
-  "title": "<plan title>",
-  "steps": [
-    { "order": 1, "description": "<step>", "done": false },
-    { "order": 2, "description": "<step>", "done": false }
-  ],
-  "risks": ["<risk>"],
-  "acceptance_criteria": ["<criterion>"],
-  "out_of_scope": ["<item>"]
-}
-```
-
-4. Report the plan label to the user: **"Plan saved as PLN-XX."** Include the Claude Code plan file reference for cross-referencing (e.g., "Claude Code plan ref: valiant-enchanting-globe").
-
-5. Call `ExitPlanMode`.
-
-**If the POST endpoint fails but MCP is available**, skip the POST, save via `vibecheck_create_context`, report the PLN-* label, and call `ExitPlanMode`.
-
-**If VibeCheck is entirely unreachable (both MCP and REST)**, skip both saves, note to the user that the plan was not persisted, and still call `ExitPlanMode`.
+**If VibeCheck is unreachable**, skip the save, note to the user that the plan was not persisted, and still call `ExitPlanMode`.
 
 > **Title rule:** The plan title must come from the plan content (the first `##` heading), never from the Claude Code plan filename. The filename is a random slug (e.g., "valiant-enchanting-globe") used internally by Claude Code — it is not meaningful to the user.
 
