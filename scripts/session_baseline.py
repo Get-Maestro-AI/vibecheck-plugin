@@ -33,12 +33,28 @@ def _build_event_id(hook_data: dict) -> str:
     return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
 
 
+def _clean_git_env() -> dict[str, str]:
+    """Return a copy of os.environ with GIT_* vars stripped.
+
+    Claude Code's hook runner may set GIT_DIR / GIT_WORK_TREE /
+    GIT_CEILING_DIRECTORIES, which override cwd-based git discovery
+    and cause commands like `git rev-parse --show-toplevel` to fail.
+    """
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def run(cmd: list[str], cwd: str, timeout: int = 5) -> str:
     """Run a subprocess and return stdout, or '' on any failure."""
     try:
         result = subprocess.run(
-            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+            env=_clean_git_env(),
         )
+        if result.returncode != 0 and result.stderr:
+            log_hook_issue(
+                "session_baseline",
+                f"Command {cmd} failed (rc={result.returncode}): {result.stderr[:200]}",
+            )
         return result.stdout.strip()
     except Exception:
         return ""
