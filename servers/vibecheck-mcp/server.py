@@ -401,7 +401,7 @@ async def list_tools() -> list[types.Tool]:
             description=(
                 "List contexts from the VibeCheck Context Library. Returns id, title, type, status, and brief preview for each context. "
                 "Use this to find specs to implement, issues to fix, or decisions to reference. "
-                "By default returns all statuses except archived — draft, active, implemented, resolved, and open contexts are all visible. "
+                "By default returns all statuses except archived — open and done contexts are all visible. "
                 "Pass status= to filter to a specific status."
             ),
             inputSchema={
@@ -414,7 +414,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "status": {
                         "type": "string",
-                        "description": "Filter by status (draft, shaped, ready, dispatched, implemented, active, archived)",
+                        "description": "Filter by status (open, done, archived)",
                     },
                     "tag": {
                         "type": "string",
@@ -553,12 +553,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "status": {
                         "type": "string",
-                        "description": (
-                            "New status. Valid values depend on context type: "
-                            "issues: open, dispatched, resolved, deferred, archived. "
-                            "Specs/research: draft, shaped, ready, dispatched, implemented, deferred, archived. "
-                            "Decisions/standards: draft, active, archived."
-                        ),
+                        "description": "New status. All context types: open, done, archived.",
                     },
                     "notes": {
                         "type": "string",
@@ -692,9 +687,9 @@ async def list_tools() -> list[types.Tool]:
             description=(
                 "Begin implementing a spec or research context from the Context Library. "
                 "Loads the full active context set (spec brief, related decisions, standing "
-                "standards) and links the current session to the spec as 'dispatched'. "
-                "Call this at the start of implementing a spec. When done, call "
-                "vibecheck_resolve with the spec ID to mark it implemented."
+                "standards) and links the current session to the spec. The spec is auto-marked "
+                "done when implementation starts. When done, call "
+                "vibecheck_resolve with the spec ID to confirm completion."
             ),
             inputSchema={
                 "type": "object",
@@ -1336,11 +1331,11 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 "session_id": session_id,
                 "link_type": "dispatched",
             })
-            # Transition status to dispatched if currently ready/shaped
-            if ctx.get("status") in ("ready", "shaped", "draft"):
+            # Auto-mark the spec as done (Layer 2: implementation started = spec served its purpose)
+            if ctx.get("status") == "open":
                 _api_call("POST", f"/api/contexts/{ctx['id']}/status", {
-                    "status": "dispatched",
-                    "source": "explicit",
+                    "status": "done",
+                    "source": "inferred",
                     "evidence": {"notes": "Implementation started via vibecheck_implement"},
                 })
 
@@ -1395,14 +1390,16 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Failed to log shape message: {result['error']}")]
         turn_count = len(result.get("conversation", [])) if isinstance(result, dict) else "?"
-        return [types.TextContent(type="text", text=f"Shape turn logged ({role}). Conversation now has {turn_count} turns.")]
+        url = f"{get_frontend_url()}/#context/{ctx_id}"
+        return [types.TextContent(type="text", text=f"Shape turn logged ({role}). Conversation now has {turn_count} turns.\nView: {url}")]
 
     if name == "vibecheck_shape_clear":
         ctx_id = arguments.get("id", "")
         result = _api_call("DELETE", f"/api/contexts/{url_quote(ctx_id, safe='')}/shape")
         if result.get("error"):
             return [types.TextContent(type="text", text=f"Failed to clear shape conversation: {result['error']}")]
-        return [types.TextContent(type="text", text=f"Shape conversation cleared for {ctx_id}.")]
+        url = f"{get_frontend_url()}/#context/{ctx_id}"
+        return [types.TextContent(type="text", text=f"Shape conversation cleared for {ctx_id}.\nView: {url}")]
 
     # ── Existing tools ────────────────────────────────────────────────────────
 
