@@ -334,7 +334,7 @@ async def list_tools() -> list[types.Tool]:
                 "Use this after fixing a blocking issue from /vibecheck:review, or after "
                 "completing a spec. Accepts either the UUID returned by vc-review or the "
                 "ISS-XX label shown on the dashboard. Type-aware: issues are archived, "
-                "specs are marked implemented."
+                "specs are marked done."
             ),
             inputSchema={
                 "type": "object",
@@ -1374,7 +1374,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 f"{skill_lib['count']} active skill(s): {skill_lib['titles']}.\n"
                 "Non-negotiable: call `vibecheck_discover(query=..., layer=\"skill\")` before starting work. Do not start before checking for a skill."
             )
-        lines.append(f"\n---\nWhen implementation is complete, call `vibecheck_resolve` with `id=\"{resolve_id}\"` to mark this spec as implemented.")
+        lines.append(f"\n---\nWhen implementation is complete, call `vibecheck_resolve` with `id=\"{resolve_id}\"` to mark this spec as done.")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
     # ── Shape conversation tools ──────────────────────────────────────────────
