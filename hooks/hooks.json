@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Use /vibecheck:review after substantial work.'"
+            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Use /vibe:check after substantial work.'"
           },
           {
             "type": "command",
@@ -37,7 +37,7 @@
           },
           {
             "type": "command",
-            "command": "echo '[VibeCheck] Call vibecheck_update at phase transitions. After substantial work, run /vibecheck:review.'"
+            "command": "echo '[VibeCheck] Call vibecheck_update at phase transitions. After substantial work, run /vibe:check.'"
           },
           {
             "type": "command",

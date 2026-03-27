@@ -23,7 +23,7 @@ You will be prompted for:
 3. Registers Claude Code lifecycle hooks in `~/.claude/settings.json`
 4. Creates a local `.venv` with the `mcp` library for the MCP server
 5. Registers the MCP server via `claude mcp add` (user scope)
-6. Symlinks slash commands into `~/.claude/commands/vibecheck/`
+6. Symlinks slash commands into `~/.claude/commands/vibe/`
 
 Safe to re-run — idempotent. Re-running pulls the latest plugin via `git pull`.
 
@@ -39,16 +39,16 @@ Then remove hooks from `~/.claude/settings.json` and delete `~/.claude/plugins/v
 
 | Command | Description |
 |---|---|
-| `/vibecheck:review` | Review changes for bugs before committing |
-| `/vibecheck:fix <ID>` | Investigate and fix a flagged issue |
-| `/vibecheck:implement <ID>` | Begin implementing a spec with full context |
-| `/vibecheck:shape <ID>` | Develop a context interactively |
-| `/vibecheck:create` | Capture a note, issue, spec, or decision |
-| `/vibecheck:search` | Find semantically related contexts |
-| `/vibecheck:contexts` | Browse all contexts |
-| `/vibecheck:context <ID>` | View a specific context |
-| `/vibecheck:resolve <ID>` | Resolve an issue or spec |
-| `/vibecheck:about` | Show VibeCheck info and all commands |
+| `/vibe:check` | Check your work at any phase before committing |
+| `/vibe:fix <ID>` | Investigate and fix a flagged issue |
+| `/vibe:implement <ID>` | Begin implementing a spec with full context |
+| `/vibe:shape <ID>` | Develop a context interactively |
+| `/vibe:create` | Capture a note, issue, spec, or decision |
+| `/vibe:search` | Find semantically related contexts |
+| `/vibe:contexts` | Browse all contexts |
+| `/vibe:context <ID>` | View a specific context |
+| `/vibe:resolve <ID>` | Resolve an issue or spec |
+| `/vibe:about` | Show VibeCheck info and all commands |
 
 ## Publishing the public repo
 

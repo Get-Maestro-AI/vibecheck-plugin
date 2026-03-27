@@ -14,7 +14,7 @@ Query preprocessing (SPEC-149 Phase 3):
 
 Plan suggestion (SPEC-177):
   Checks /api/plan-context — if a fresh objective (< 10 min) has no active
-  plan, surfaces a one-time suggestion to run /vibecheck:plan.
+  plan, surfaces a one-time suggestion to run /vibe:plan.
 
 Uses only stdlib. Always exits 0. Targets < 3s wall time.
 """
@@ -294,7 +294,7 @@ def _check_plan_suggestion_from_data(session_id: str, data: dict | None) -> str 
     title_part = f' "{objective_title}"' if objective_title else ""
     return (
         f"[VibeCheck] New objective{title_part} detected — no active plan yet.\n"
-        f"  Run /vibecheck:plan to structure your approach before diving in."
+        f"  Run /vibe:plan to structure your approach before diving in."
     )
 
 
@@ -346,14 +346,14 @@ def _check_workflow_nudge(
     if not active_spec_id and not saved_plan:
         message = (
             "[VibeCheck] No spec or plan found for this session.\n"
-            "  Run /vibecheck:shape to define what you're building before diving in."
+            "  Run /vibe:shape to define what you're building before diving in."
         )
 
     # Case 2: Spec exists but no plan — suggest plan
     elif active_spec_id and not saved_plan:
         message = (
             f"[VibeCheck] Spec {active_spec_id} is active but no plan found.\n"
-            "  Run /vibecheck:plan to structure your implementation steps."
+            "  Run /vibe:plan to structure your implementation steps."
         )
 
     # Case 3: Both spec and plan — suggest review if session is > 10 min old
@@ -364,7 +364,7 @@ def _check_workflow_nudge(
             if age_min >= 10:
                 message = (
                     "[VibeCheck] You have an active spec and plan.\n"
-                    "  Run /vibecheck:review before committing to catch issues early."
+                    "  Run /vibe:check before committing to catch issues early."
                 )
         except Exception:
             pass

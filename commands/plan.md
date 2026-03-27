@@ -124,7 +124,7 @@ if arg and arg.endswith("-plan"):
     plan_type = arg
     print(f"Plan type overridden by argument: {plan_type}")
 elif arg:
-    # Free-text task description (e.g. /vibecheck:plan "I want to build X")
+    # Free-text task description (e.g. /vibe:plan "I want to build X")
     # Use as objective title if no session objective exists
     if not objective_title:
         objective_title = arg
@@ -154,10 +154,10 @@ Before proceeding, classify this task as **BOUNDED** or **OPEN** using the outpu
 - Multi-session scope where misaligned expectations would be costly to undo
 
 **If OPEN and no active spec exists:**
-Tell the user: *"This task looks open-ended — a spec would lock down the 'what' before we plan the 'how.' Want to run `/vibecheck:shape` to capture requirements first, or plan directly?"*
+Tell the user: *"This task looks open-ended — a spec would lock down the 'what' before we plan the 'how.' Want to run `/vibe:shape` to capture requirements first, or plan directly?"*
 
 Wait for their answer before continuing:
-- **Shape first:** run `/vibecheck:shape` with the task description, then return here once the spec exists
+- **Shape first:** run `/vibe:shape` with the task description, then return here once the spec exists
 - **Plan directly:** proceed to Phase 2
 
 **Skip this check if** a saved plan already exists (resume path), an active spec already exists (scope already defined), or `$ARGUMENTS` contained a plan-type override.
@@ -184,7 +184,7 @@ Examples of good queries: `"feature-plan"`, `"debug-plan"`, `"design-plan"`. Do 
 - **Two specialists: only when the task genuinely spans two clearly distinct domains** with no overlap. Example: a task that requires *both* a DB migration *and* a new frontend panel. In that case, run both specialists sequentially — first the backend specialist (architecture-plan), then the frontend specialist (design-plan) — and produce one combined structured plan. Do not run two specialists for the same concern (e.g., feature-plan + architecture-plan both cover backend features).
 - **Never three or more.** If the task seems to require three specialists, the scope is too large for one plan — split it.
 
-**Override:** if `$ARGUMENTS` contains a plan type (e.g., `/vibecheck:plan architecture`), use that type regardless of what discover returns.
+**Override:** if `$ARGUMENTS` contains a plan type (e.g., `/vibe:plan architecture`), use that type regardless of what discover returns.
 
 **Fallback — always load SKL-178, never drop to built-in:** If `vibecheck_discover` returns no results, returns results with no `skill_type=plan` match, or returns only unrelated skills, explicitly load `SKL-178` (feature-plan) as the default:
 

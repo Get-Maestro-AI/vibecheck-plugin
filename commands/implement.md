@@ -1,5 +1,5 @@
 ---
-description: Begin implementing a spec from the Context Library (e.g. /vibecheck:implement SPEC-4)
+description: Begin implementing a spec from the Context Library (e.g. /vibe:implement SPEC-4)
 allowed-tools: Read, Grep, Glob, Edit, Write
 ---
 
@@ -48,7 +48,7 @@ vibecheck_discover(query="plan for $ARGUMENTS", layer="work", type="plan", limit
   - Does the plan goal match the spec's objective?
   - Are the steps consistent with the spec's scope?
 - If aligned: proceed directly to **Step 3 — Implement**
-- If misaligned or stale: surface the mismatch to the user and offer to re-plan via `/vibecheck:plan` or proceed with the spec directly
+- If misaligned or stale: surface the mismatch to the user and offer to re-plan via `/vibe:plan` or proceed with the spec directly
 
 **If no plan is found:**
 Classify the task scope before deciding how to proceed:
@@ -57,9 +57,9 @@ Classify the task scope before deciding how to proceed:
 - Proceed directly to **Step 3 — Implement** — a formal plan adds little value here
 
 **OPEN** (multi-file changes, unresolved design decisions, or multi-session scope):
-- Tell the user: *"No active plan found for this spec. This looks like it could benefit from a planning step before diving in. Want to run `/vibecheck:plan` first, or implement directly?"*
+- Tell the user: *"No active plan found for this spec. This looks like it could benefit from a planning step before diving in. Want to run `/vibe:plan` first, or implement directly?"*
 - Wait for their answer:
-  - **Plan first:** run `/vibecheck:plan $ARGUMENTS`, then proceed to **Step 3** once the plan is approved
+  - **Plan first:** run `/vibe:plan $ARGUMENTS`, then proceed to **Step 3** once the plan is approved
   - **Implement directly:** proceed to **Step 3** without a plan
 
 **Step 3 — Explore the codebase**
@@ -77,4 +77,4 @@ Execute the plan step by step, in order. For each step:
 When implementation is done:
 1. Call `vibecheck_resolve` with the spec ID to mark it implemented
 2. If a PLN-* plan was used, call `vibecheck_resolve` with the plan ID to mark it complete
-3. Run `/vibecheck:review` to review changes before committing
+3. Run `/vibe:check` to review changes before committing

@@ -56,4 +56,4 @@ Write a numbered, step-by-step plan. For each step:
 
 Once the fix is implemented, call `vibecheck_resolve` with the issue ID to clear it from the dashboard.
 
-> **Note:** If the ID you looked up turns out to be a spec rather than an issue, use `/vibecheck:implement` instead — it loads the full context set and sets the right status transitions.
+> **Note:** If the ID you looked up turns out to be a spec rather than an issue, use `/vibe:implement` instead — it loads the full context set and sets the right status transitions.

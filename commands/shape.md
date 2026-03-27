@@ -203,9 +203,9 @@ The applied brief must match the output of the sub-specialist's methodology exac
 1. Show the final shaped brief
 2. Report the context label (e.g. SPEC-42) and status
 3. Suggest next steps:
-   - If spec: "Ready for `/vibecheck:plan` to structure your approach, or `/vibecheck:implement <label>` to go straight to implementation"
+   - If spec: "Ready for `/vibe:plan` to structure your approach, or `/vibe:implement <label>` to go straight to implementation"
    - If design: "DESIGN.md written — ready for implementation"
-   - If strategy: "Go/no-go decision captured — proceed to `/vibecheck:plan` if go"
+   - If strategy: "Go/no-go decision captured — proceed to `/vibe:plan` if go"
 
 ---
 

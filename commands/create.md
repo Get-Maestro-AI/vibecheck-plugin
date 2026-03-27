@@ -26,10 +26,10 @@ Call `vibecheck_create_context` with the parsed fields:
 After creation, report:
 - The assigned label and UUID
 - The type and title
-- Next steps: `/vibecheck:context <label>` to view, `/vibecheck:shape <label>` to develop further, `/vibecheck:implement <label>` if it's a spec
+- Next steps: `/vibe:context <label>` to view, `/vibe:shape <label>` to develop further, `/vibe:implement <label>` if it's a spec
 
 **Examples:**
-- `/vibecheck:create Add caching layer for embeddings`
-- `/vibecheck:create decision: Switch from SQLite to PostgreSQL | Performance requirements exceed SQLite capabilities`
-- `/vibecheck:create issue: Session titles missing for forked sessions`
-- `/vibecheck:create spec: Rate limiting for the summarizer endpoint | Prevent abuse and control LLM costs #backend #cost`
+- `/vibe:create Add caching layer for embeddings`
+- `/vibe:create decision: Switch from SQLite to PostgreSQL | Performance requirements exceed SQLite capabilities`
+- `/vibe:create issue: Session titles missing for forked sessions`
+- `/vibe:create spec: Rate limiting for the summarizer endpoint | Prevent abuse and control LLM costs #backend #cost`

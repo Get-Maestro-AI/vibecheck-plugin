@@ -1,19 +1,19 @@
 ---
-description: Review recent changes — routes to specialized review skills based on context
+description: Check your work at any phase — routes to specialized check skills based on context
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-You will perform a focused review of your recent changes and report findings to the VibeCheck dashboard.
+You will perform a focused quality check of your recent work and report findings to the VibeCheck dashboard.
 
-**Your job is NOT general feedback. Your job is: find real problems that should be fixed before this commit.**
+**Your job is NOT general feedback. Your job is: find real problems that should be fixed before moving on.**
 
-> **IMPORTANT: Do not make any code changes during this review.** Your only action is to analyze the diff, discover relevant review skills, POST findings to VibeCheck, and present results to the user. Fixes happen separately, after the user decides which issues to address.
+> **IMPORTANT: Do not make any code changes during this check.** Your only action is to analyze the work, discover relevant check skills, POST findings to VibeCheck, and present results to the user. Fixes happen separately, after the user decides which issues to address.
 
-**Scope:** The diff below is automatically scoped to the current session's objective when available. If no objective was found, it falls back to staged or uncommitted changes. If the diff shown below doesn't match the work you've been doing in this session, use your own judgment — review your recent changes by examining `git diff HEAD` or `git diff` for the files you actually modified.
+**Scope:** The context below is automatically scoped to the current session's objective and phase when available. If no objective was found, it falls back to staged or uncommitted changes.
 
 ---
 
-## Phase 1 — Gather context and route
+## Phase 1 — Gather context and detect development phase
 
 !`python3 - <<'PY'
 import json, os, subprocess, urllib.request, urllib.parse
@@ -34,10 +34,13 @@ if not vc_url:
 if not vc_url:
     vc_url = "http://localhost:8420"
 
-# -- 1. Fetch objective context from VibeCheck --
+# -- 1. Fetch objective context + phase signals from VibeCheck --
 obj_files = []
 obj_started_at = ""
 obj_title = ""
+pipeline_phase = ""
+status_label = ""
+current_task = ""
 try:
     params = {"cwd": cwd}
     if session_id:
@@ -48,16 +51,30 @@ try:
     obj_files = ctx.get("objective_files") or []
     obj_started_at = ctx.get("objective_started_at") or ""
     obj_title = ctx.get("objective_title") or ""
+    pipeline_phase = ctx.get("pipeline_phase") or ""
+    status_label = ctx.get("status_label") or ""
+    current_task = ctx.get("current_task") or ""
 except Exception:
     pass
+
+# -- 2. Print phase context --
+if pipeline_phase:
+    print(f"Pipeline phase: {pipeline_phase}")
+if status_label:
+    print(f"Work phase: {status_label}")
+if current_task:
+    print(f"Task: {current_task}")
+if obj_title:
+    print(f"Objective: {obj_title}")
+if status_label or current_task or obj_title:
+    print()
 
 def git(*args):
     r = subprocess.run(["git"] + list(args), capture_output=True, text=True, cwd=cwd)
     return r.stdout.strip()
 
-# -- 2. Build diff --
+# -- 3. Build diff (for implementation/code phases) --
 if obj_files:
-    print(f"Objective: {obj_title}")
     print(f"Files changed during objective ({len(obj_files)}):")
     for f in obj_files:
         print(f"  {f}")
@@ -100,7 +117,7 @@ else:
     staged_names = git("diff", "--cached", "--name-only")
     changed_files = (staged_names if staged_names else git("diff", "--name-only", "HEAD")).splitlines()
 
-# -- 3. File-pattern routing heuristics --
+# -- 4. File-pattern routing heuristics (fallback signal) --
 import re
 
 code_exts = {'.py', '.ts', '.tsx', '.js', '.jsx', '.go', '.rs'}
@@ -108,33 +125,36 @@ design_exts = {'.tsx', '.jsx', '.css', '.scss'}
 arch_patterns = [r'models\.py$', r'routers/', r'state/', r'alembic/', r'db/']
 product_exts = {'.md'}
 
-review_types = set()
+check_types = set()
 md_count = 0
 
 for f in changed_files:
     ext = os.path.splitext(f)[1].lower()
     if ext in code_exts:
-        review_types.add("code-review")
+        check_types.add("code-check")
     if ext in design_exts or 'frontend/' in f:
-        review_types.add("design-review")
+        check_types.add("design-check")
     if any(re.search(p, f) for p in arch_patterns):
-        review_types.add("architecture-review")
+        check_types.add("architecture-check")
     if ext in product_exts:
         md_count += 1
 
 if changed_files and md_count > len(changed_files) * 0.5:
-    review_types.add("product-review")
+    check_types.add("product-check")
 for f in changed_files:
     base_name = os.path.basename(f).lower()
     if base_name in ('readme.md', 'claude.md') or 'docs/' in f:
-        review_types.add("product-review")
+        check_types.add("product-check")
         break
 
-if not review_types:
-    review_types.add("code-review")
+if not check_types:
+    check_types.add("code-check")
 
 print()
-print("Suggested review types: " + ", ".join(sorted(review_types)))
+print("Heuristic check types: " + ", ".join(sorted(check_types)))
+print("Pipeline phase: " + (pipeline_phase or "(none)"))
+print("Work phase: " + (status_label or "(none)"))
+print("Current task: " + (current_task or "(none)"))
 PY
 `
 
@@ -184,43 +204,76 @@ PY
 
 ---
 
-## Phase 2 — Discover and load review skills
+## Phase 2 — Discover and load check skills
 
-Now route to the right review methodology. Two signals to merge:
+Route to the right check methodology using **three signals**:
 
-**Signal A** (above): The "Suggested review types" line from file-pattern heuristics.
+**Signal A** (above): The "Heuristic check types" line from file-pattern heuristics.
 
-**Signal B**: Call `vibecheck_discover` to find matching review skills. Use `skill_type="review"` to pull all skills registered as review skills:
+**Signal B**: The **pipeline phase** (lifecycle stage of the sprint board item) and **work phase** (what the agent is doing right now) from Phase 1.
+
+### Phase-aware routing
+
+Read the `Pipeline phase`, `Work phase`, and `Current task` lines from the Phase 1 output. **Pipeline phase is the primary routing signal** — it tells you what lifecycle stage this work is in, which determines what artifact to check. Work phase is secondary context within the pipeline stage.
+
+**Priority cascade:**
+1. If `Pipeline phase` is set → use it (strongest signal)
+2. Else if `Work phase` is set → use it as fallback
+3. Else → fall back to objective title / heuristics
+
+#### Pipeline phase routing (primary)
+
+| Pipeline phase | Discovery query pattern | Situation parameter |
+|---|---|---|
+| `shape` | `"check spec quality completeness clarity scope"` | `"Shape phase — <current_task>"` |
+| `plan` | `"check plan quality completeness feasibility"` | `"Plan phase — <current_task>"` |
+| `build` | `"check code correctness edge cases error handling"` | `"Build phase — <current_task>"` |
+| `review` | `"check code review pre-commit bugs standards"` | `"Review phase — <current_task>"` |
+| `done` | `"check code review pre-commit bugs standards"` | `"Done phase — final check"` |
+
+#### Work phase routing (fallback when no pipeline phase)
+
+| Work phase | Discovery query pattern | Situation parameter |
+|---|---|---|
+| `planning` | `"check plan quality completeness feasibility"` | `"Planning — <current_task>"` |
+| `implementing` | `"check code correctness edge cases error handling"` | `"Implementing — <current_task>"` |
+| `debugging` | `"check code correctness bug fix regression"` | `"Debugging — <current_task>"` |
+| `reviewing` | `"check code review pre-commit bugs standards"` | `"Reviewing — <current_task>"` |
+| `(none)` or other | `"check <objective_title or summary of changes>"` | _(omit or use heuristic context)_ |
+
+Call discovery:
 
 ```
-vibecheck_discover(query="review <objective_title or summary of changes>", layer="skill", skill_type="review", limit=4)
+vibecheck_discover(query="<from table above>", layer="skill", skill_type="check", situation="<from table above>", limit=4)
 ```
 
-**For every skill returned, you MUST call `vibecheck_get_context(id)` to load the full brief.** Do not rely on the context_summary snippet from the discover result — it is not the methodology, it is a description of when to use the skill. Do not skip this step because you already know what "security review" or "code review" means. The brief defines the specific methodology to follow; your general knowledge does not substitute for it.
+**For every skill returned, you MUST call `vibecheck_get_context(id)` to load the full brief.** Do not rely on the context_summary snippet from the discover result — it is not the methodology, it is a description of when to use the skill. Do not skip this step because you already know what "security check" or "code check" means. The brief defines the specific methodology to follow; your general knowledge does not substitute for it.
 
 **Merge logic:**
-- **`code-review` is always required** when the diff contains any code files (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, etc.). Do not drop it because a more specific review type was discovered.
-- Union Signal A and Signal B — do not pick one type, run **all** that apply. "Security changes were found" does not replace code-review; it adds to it.
-- For each review type in the final set: if a skill brief was loaded for that type, follow its methodology. Otherwise use the Built-in Review Criteria.
+- **In Build/Review phases:** `code-check` is always required when the diff contains any code files (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, etc.). Do not drop it because a more specific check type was discovered.
+- **In Shape phase:** spec-check skills take priority. Code-check is only relevant if code files were actually changed.
+- **In Plan phase:** plan-check skills take priority. Code-check only if implementation has started alongside planning.
+- Union Signal A and Signal B — do not pick one type, run **all** that apply.
+- For each check type in the final set: if a skill brief was loaded for that type, follow its methodology. Otherwise use the Built-in Check Criteria.
 - Run each type in sequence; all findings across all passes go into the single payload.
-- If no skills are found at all, fall back to the Built-in Review Criteria for every type.
+- If no skills are found at all, fall back to the Built-in Check Criteria for every type.
 
 ---
 
-## Phase 3 — Execute review and report
+## Phase 3 — Execute checks and report
 
-### Review execution
+### Check execution
 
-**You must run every review type in the set — not just the most interesting one.** If the set is `{code-review, security-review}`, run both in full before submitting.
+**You must run every check type in the set — not just the most interesting one.** If the set is `{code-check, security-check}`, run both in full before submitting.
 
-For each review type identified in Phase 2:
+For each check type identified in Phase 2:
 1. If a skill brief was loaded for this type, follow its methodology
-2. Otherwise, use the Built-in Review Criteria below
-3. Tag each finding with the review type that produced it (in the `category` field)
+2. Otherwise, use the Built-in Check Criteria below
+3. Tag each finding with the check type that produced it (in the `category` field)
 
 Read additional file context with Read/Grep/Glob if needed to evaluate correctness.
 
-### Built-in Review Criteria (fallback — use when no skill is loaded for a review type)
+### Built-in Check Criteria (fallback — use when no skill is loaded for a check type)
 
 Only flag issues in these categories:
 - Correctness bugs (logic errors, off-by-one, wrong conditionals)
@@ -236,13 +289,13 @@ Only flag issues in these categories:
 
 **Do NOT include:** style nitpicks, naming preferences, documentation gaps, test coverage opinions (unless you can name a specific uncovered bug scenario).
 
-If no meaningful issues exist, the review should be clean (ready_to_commit: true, empty blocking_issues).
+If no meaningful issues exist, the check should be clean (ready_to_commit: true, empty blocking_issues).
 
 ---
 
 ## Finalize and submit
 
-1. Decide: is this safe to commit as-is?
+1. Decide: is this safe to move forward as-is?
 2. Submit findings using `vibecheck_push_review` — session_id and cwd are resolved automatically.
 3. Parse the response and present a summary to the user.
 
@@ -252,7 +305,7 @@ vibecheck_push_review(
   blocking_issues=[
     {
       "title": "<short title, max 80 chars>",
-      "category": "<review type, e.g. code-review, design-review>",
+      "category": "<check type, e.g. code-check, design-check>",
       "severity": "High",           # Critical | High | Medium | Low
       "location": "<file.py:line>",
       "problem": "<one sentence: what is wrong>",
@@ -296,7 +349,7 @@ Results logged to VibeCheck dashboard.
 Would you like me to fix any of these?
 ```
 
-Then wait for the user's response. If the user says yes (for all or specific issues), use `/vibecheck:fix <ID>` for each one (ID is the internal VibeCheck issue ID).
+Then wait for the user's response. If the user says yes (for all or specific issues), use `/vibe:fix <ID>` for each one (ID is the internal VibeCheck issue ID).
 
 **If VibeCheck is unreachable**, show findings but note results were not saved to the dashboard.
 
@@ -313,12 +366,12 @@ Use this 6-state table to select the right output:
 
 | Condition | Symbol | Line 1 | Line 2 |
 |---|---|---|---|
-| Clean, no prior issues — FTX first cycle | `✓` green | `Clean review. No issues found.` | `One down.` |
-| Clean, no issues — normal | `✓` green | `Clean review. No issues found.` | — |
-| Non-blocking issues only (test gaps, suggestions) | `△` yellow | `Review complete. N suggestions — nothing blocking.` | `Fix them when you're ready.` |
+| Clean, no prior issues — FTX first cycle | `✓` green | `Clean check. No issues found.` | `One down.` |
+| Clean, no issues — normal | `✓` green | `Clean check. No issues found.` | — |
+| Non-blocking issues only (test gaps, suggestions) | `△` yellow | `Check complete. N suggestions — nothing blocking.` | `Fix them when you're ready.` |
 | Blocking issues found | `✗` red | `N blocking issues found.` | `Not done yet.` |
-| Clean after prior blocking issues — FTX | `✓` green | `Clean review. All issues resolved.` | `Loop closed.` |
-| Clean after prior blocking issues — normal | `✓` green | `Clean review. All issues resolved.` | — |
+| Clean after prior blocking issues — FTX | `✓` green | `Clean check. All issues resolved.` | `Loop closed.` |
+| Clean after prior blocking issues — normal | `✓` green | `Clean check. All issues resolved.` | — |
 
 **Selection logic:**
 - `ftx_just_completed: true` → use the FTX variant of the matching clean state
@@ -332,5 +385,5 @@ Use this 6-state table to select the right output:
 Print the summary to the terminal using a `Bash` echo command with `-e` flag for ANSI codes. Example for the clean state:
 
 ```bash
-echo -e "\033[32m✓ Clean review. No issues found.\033[0m"
+echo -e "\033[32m✓ Clean check. No issues found.\033[0m"
 ```

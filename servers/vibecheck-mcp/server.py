@@ -331,7 +331,7 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_resolve",
             description=(
                 "Resolve a context (issue, spec, etc.) in the VibeCheck dashboard. "
-                "Use this after fixing a blocking issue from /vibecheck:review, or after "
+                "Use this after fixing a blocking issue from /vibe:check, or after "
                 "completing a spec. Accepts either the UUID returned by vc-review or the "
                 "ISS-XX label shown on the dashboard. Type-aware: issues are archived, "
                 "specs are marked done."
@@ -362,7 +362,7 @@ async def list_tools() -> list[types.Tool]:
                 "finished implementing a task and are ready for final review. "
                 "Returns the list of files to review. After reviewing, call "
                 "vibecheck_finalize_objective to close out. "
-                "Note: /vibecheck:review runs this full workflow automatically."
+                "Note: /vibe:check runs this full workflow automatically."
             ),
             inputSchema={
                 "type": "object",
@@ -473,7 +473,7 @@ async def list_tools() -> list[types.Tool]:
                     "type": {
                         "type": "string",
                         "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona", "plan"],
-                        "description": "Context type (default: note). Use 'plan' for implementation plans created by /vibecheck:plan.",
+                        "description": "Context type (default: note). Use 'plan' for implementation plans created by /vibe:plan.",
                     },
                     "predecessor_id": {
                         "type": "string",
@@ -672,7 +672,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "skill_type": {
                         "type": "string",
-                        "description": "Filter skills by sub-type (e.g. 'review'). Only meaningful when layer='skill'.",
+                        "description": "Filter skills by sub-type (e.g. 'check', 'shape', 'plan'). Only meaningful when layer='skill'.",
                     },
                     "limit": {
                         "type": "integer",
@@ -706,7 +706,7 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_push_review",
             description=(
                 "Submit a structured code review to the VibeCheck dashboard. "
-                "Call this at the end of /vibecheck:review to persist findings, "
+                "Call this at the end of /vibe:check to persist findings, "
                 "create tracked issues, and get the ftx_just_completed signal for "
                 "the status summary. session_id and cwd are resolved automatically. "
                 "Returns: ok, blocking_issues count, issues[] with server-assigned IDs, "
@@ -1454,7 +1454,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             type="text",
             text=(
                 "Done checkpoint blocked until completion protocol finishes. "
-                f"{result.get('next_action', result.get('reason', 'Non-negotiable: run /vibecheck:review before this session ends.'))}"
+                f"{result.get('next_action', result.get('reason', 'Non-negotiable: run /vibe:check before this session ends.'))}"
             ),
         )]
 

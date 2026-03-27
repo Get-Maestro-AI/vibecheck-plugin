@@ -27,4 +27,4 @@ Present the context in a readable format:
 **Linked sessions:** (list any linked sessions)
 **Successors:** (list any successor contexts)
 
-If the context is not found, say so and suggest using `/vibecheck:contexts` to browse available contexts.
+If the context is not found, say so and suggest using `/vibe:contexts` to browse available contexts.

@@ -25,8 +25,8 @@ Present the results as a compact table:
 If no results are found, say so and suggest trying different filters.
 
 **Examples:**
-- `/vibecheck:contexts` — list all contexts
-- `/vibecheck:contexts issue` — list issues
-- `/vibecheck:contexts issue open` — list open issues
-- `/vibecheck:contexts spec ready` — list specs that are ready for implementation
-- `/vibecheck:contexts tag:severity:high` — list contexts with a specific tag
+- `/vibe:contexts` — list all contexts
+- `/vibe:contexts issue` — list issues
+- `/vibe:contexts issue open` — list open issues
+- `/vibe:contexts spec ready` — list specs that are ready for implementation
+- `/vibe:contexts tag:severity:high` — list contexts with a specific tag

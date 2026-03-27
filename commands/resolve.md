@@ -6,7 +6,7 @@ Resolve the specified context(s) in the VibeCheck dashboard.
 
 Context IDs to resolve (space-separated): $ARGUMENTS
 
-Accepts either the UUID returned by `/vibecheck:review` or the ISS-XX label shown on the dashboard.
+Accepts either the UUID returned by `/vibe:check` or the ISS-XX label shown on the dashboard.
 Use the ID exactly as returned — do not guess.
 
 For each ID in the arguments, call:
@@ -21,6 +21,6 @@ After each call, report to the user:
 - Any errors
 
 If no arguments are provided, explain usage:
-  `/vibecheck:resolve ISS-33` — resolve by ISS-XX label
-  `/vibecheck:resolve 3f8a1b2c-...` — resolve by UUID
-  `/vibecheck:resolve ISS-33 ISS-34` — resolve multiple at once
+  `/vibe:resolve ISS-33` — resolve by ISS-XX label
+  `/vibe:resolve 3f8a1b2c-...` — resolve by UUID
+  `/vibe:resolve ISS-33 ISS-34` — resolve multiple at once

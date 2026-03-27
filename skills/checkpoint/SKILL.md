@@ -13,7 +13,7 @@ allowed-tools: Read
 
 - ALWAYS include `files_modified` in every `vibecheck_update` call where files changed
 - ALWAYS send `vibecheck_update` with `status_label: "reviewing"` before final completion
-- After substantial work, run `/vibecheck:review` to catch issues before committing
+- After substantial work, run `/vibe:check` to catch issues before committing
 - After review is clean, send `vibecheck_update` with `status_label: "done"`
 
 ---

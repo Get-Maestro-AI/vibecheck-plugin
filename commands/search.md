@@ -23,10 +23,10 @@ Present results as a compact list, ordered by relevance:
 
 If no results are found, say so and suggest:
 - Trying different keywords
-- Using `/vibecheck:contexts` to browse all contexts
-- Using `/vibecheck:create` to capture a new one
+- Using `/vibe:contexts` to browse all contexts
+- Using `/vibe:create` to capture a new one
 
 **Examples:**
-- `/vibecheck:search how do we handle authentication`
-- `/vibecheck:search session embedding strategy`
-- `/vibecheck:search coding standards for error handling`
+- `/vibe:search how do we handle authentication`
+- `/vibe:search session embedding strategy`
+- `/vibe:search coding standards for error handling`

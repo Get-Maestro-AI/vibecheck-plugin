@@ -10,7 +10,7 @@ Arguments:
   - optional: `current_task`, `completed_subtasks`, `files_modified`, `confidence`, `next_step`
 
 Example:
-`/vibecheck:update {"status_label":"implementing","summary":"Implemented completion protocol hardening.","current_task":"Cleaning objective resolution fallbacks","completed_subtasks":["Added robust fallback rules"],"files_modified":["vibecheck/event_processor.py"]}`
+`/vibe:update {"status_label":"implementing","summary":"Implemented completion protocol hardening.","current_task":"Cleaning objective resolution fallbacks","completed_subtasks":["Added robust fallback rules"],"files_modified":["vibecheck/event_processor.py"]}`
 
 ## Steps
 

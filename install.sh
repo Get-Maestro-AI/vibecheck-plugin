@@ -4,7 +4,7 @@
 # Installs the VibeCheck plugin for Claude Code:
 #   - Hooks       → ~/.claude/settings.json  (safe merge, never overwrites unrelated hooks)
 #   - MCP server  → claude mcp add (user scope)
-#   - Commands    → ~/.claude/commands/vibecheck/*.md (symlinks)
+#   - Commands    → ~/.claude/commands/vibe/*.md (symlinks)
 #
 # Safe to re-run (idempotent).
 #
@@ -153,7 +153,7 @@ if $DRY_RUN; then
   step "Dry run — nothing written"
   echo "  Hooks    → $SETTINGS_FILE"
   echo "  MCP      → claude mcp add vibecheck (user scope)"
-  echo "  Commands → $HOME/.claude/commands/vibecheck/"
+  echo "  Commands → $HOME/.claude/commands/vibe/"
   exit 0
 fi
 
@@ -212,7 +212,7 @@ OUR_HOOKS = {
     "SessionStart": [
         {
             "identity": "[VibeCheck] Session started",
-            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. After substantial work, run /vibecheck:review.'",
+            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Run /vibe:check after drafting specs/plans and before committing.'",
             "options": {},
         },
         {
@@ -244,7 +244,7 @@ OUR_HOOKS = {
         },
         {
             "identity": "[VibeCheck] Call vibecheck_update",
-            "command": "echo '[VibeCheck] Call vibecheck_update at phase transitions. After substantial work, run /vibecheck:review.'",
+            "command": "echo '[VibeCheck] Call vibecheck_update after each file edit or completed subtask. Run /vibe:check after drafting specs/plans and before committing.'",
             "options": {},
         },
         {
@@ -377,14 +377,47 @@ for event_name, hooks in OUR_HOOKS.items():
     for hook in hooks:
         upsert_hook(event_name, hook["identity"], hook["command"], hook["options"], hook.get("matcher"))
 
+# ── Permissions: auto-approve all vibecheck MCP tools ────────────────────
+# Without these, every vibecheck_update call triggers a permission prompt,
+# which creates enough friction that the model stops calling them.
+
+VIBECHECK_PERMISSIONS = [
+    "mcp__vibecheck__vibecheck_update",
+    "mcp__vibecheck__vibecheck_discover",
+    "mcp__vibecheck__vibecheck_get_context",
+    "mcp__vibecheck__vibecheck_get_active_context_set",
+    "mcp__vibecheck__vibecheck_create_context",
+    "mcp__vibecheck__vibecheck_update_context",
+    "mcp__vibecheck__vibecheck_push_review",
+    "mcp__vibecheck__vibecheck_find_related",
+    "mcp__vibecheck__vibecheck_list_contexts",
+    "mcp__vibecheck__vibecheck_link_context",
+    "mcp__vibecheck__vibecheck_resolve",
+    "mcp__vibecheck__vibecheck_implement",
+    "mcp__vibecheck__vibecheck_begin_completion",
+    "mcp__vibecheck__vibecheck_finalize_objective",
+    "mcp__vibecheck__vibecheck_shape_message",
+    "mcp__vibecheck__vibecheck_shape_clear",
+]
+
+perms = settings.setdefault("permissions", {})
+allow = perms.setdefault("allow", [])
+existing_set = set(allow)
+added = 0
+for perm in VIBECHECK_PERMISSIONS:
+    if perm not in existing_set:
+        allow.append(perm)
+        existing_set.add(perm)
+        added += 1
+
 with open(settings_file, "w") as f:
     json.dump(settings, f, indent=2)
     f.write("\n")
 
-print("ok")
+print(f"ok (permissions: {added} added, {len(VIBECHECK_PERMISSIONS) - added} already present)")
 PYEOF
 
-ok "Hooks registered in $SETTINGS_FILE"
+ok "Hooks + permissions registered in $SETTINGS_FILE"
 ok "  SessionStart      → health_check, session_baseline, push_event, artifact scan"
 ok "  UserPromptSubmit  → context_inject, push_event"
 ok "  PreToolUse        → push_event"
@@ -414,15 +447,59 @@ claude mcp add vibecheck \
 
 ok "MCP server registered (user scope)"
 
-# ── Slash commands → ~/.claude/commands/vibecheck/ ────────────────────────────
+# ── Global monitoring protocol → ~/.claude/CLAUDE.md ─────────────────────────
+
+step "Installing global monitoring protocol"
+
+GLOBAL_CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+VIBECHECK_MARKER_OPEN="<!-- vibecheck-monitoring-protocol -->"
+VIBECHECK_MARKER_CLOSE="<!-- /vibecheck-monitoring-protocol -->"
+
+# Remove existing protocol block if present, then write fresh version.
+# BOTH markers must exist — BSD sed range delete eats to EOF if the closing marker is missing.
+if [[ -f "$GLOBAL_CLAUDE_MD" ]] \
+   && grep -q "$VIBECHECK_MARKER_OPEN" "$GLOBAL_CLAUDE_MD" 2>/dev/null \
+   && grep -q "$VIBECHECK_MARKER_CLOSE" "$GLOBAL_CLAUDE_MD" 2>/dev/null; then
+  sed -i '' '/<!-- vibecheck-monitoring-protocol -->/,/<!-- \/vibecheck-monitoring-protocol -->/d' "$GLOBAL_CLAUDE_MD"
+fi
+
+cat >> "$GLOBAL_CLAUDE_MD" <<'MDEOF'
+
+<!-- vibecheck-monitoring-protocol -->
+<monitoring_protocol>
+You MUST report progress to the VibeCheck dashboard throughout this session using the vibecheck MCP tools.
+Reporting checkpoints are mandatory at each of these moments:
+- Before starting a new task: call vibecheck_update with what you plan to do.
+- After each file edit or completed subtask: call vibecheck_update with what changed.
+- On every phase change (planning → implementing → debugging → reviewing): call vibecheck_update.
+- Before your final response in the conversation: call vibecheck_update with status "done".
+- After drafting a spec or plan: run /vibe:check to check quality before continuing.
+- After completing each implementation task: run /vibe:check to catch issues before committing.
+- After fixing any review-flagged issue: call vibecheck_resolve to mark it fixed on the dashboard.
+- When a spec or plan has been fully implemented: update its status to "done" via vibecheck_update_context.
+Minimum cadence: if 5 minutes of active work pass without a checkpoint, you are behind. Report now.
+The developer watches the dashboard externally. Silence = unknown state. Keep it live.
+</monitoring_protocol>
+<!-- /vibecheck-monitoring-protocol -->
+MDEOF
+ok "Monitoring protocol installed in $GLOBAL_CLAUDE_MD"
+
+# ── Slash commands → ~/.claude/commands/vibe/ ─────────────────────────────────
 
 step "Installing slash commands"
 
-COMMANDS_DEST="$HOME/.claude/commands/vibecheck"
+COMMANDS_DEST="$HOME/.claude/commands/vibe"
 mkdir -p "$COMMANDS_DEST"
 
+# Clean up old vibecheck/ namespace directory if it exists.
+OLD_COMMANDS_DIR="$HOME/.claude/commands/vibecheck"
+if [[ -d "$OLD_COMMANDS_DIR" ]]; then
+  rm -rf "$OLD_COMMANDS_DIR"
+  warn "Removed old namespace directory: $OLD_COMMANDS_DIR"
+fi
+
 # Remove legacy symlinks from old command names.
-for legacy in checkpoint dismiss-issue find-related create-context create-issue complete; do
+for legacy in checkpoint dismiss-issue find-related create-context create-issue complete review; do
   if [[ -L "$COMMANDS_DEST/$legacy.md" ]]; then
     rm -f "$COMMANDS_DEST/$legacy.md"
     warn "Removed legacy command: $legacy"
@@ -432,7 +509,7 @@ done
 for cmd_file in "$COMMANDS_SRC"/*.md; do
   cmd_name="$(basename "$cmd_file")"
   ln -sf "$cmd_file" "$COMMANDS_DEST/$cmd_name"
-  ok "  /vibecheck:${cmd_name%.md}"
+  ok "  /vibe:${cmd_name%.md}"
 done
 
 # ── Verify server connection ──────────────────────────────────────────────────
@@ -457,16 +534,16 @@ echo ""
 echo "  Restart Claude Code (or open a new session) for hooks to take effect."
 echo ""
 echo "  Core workflow:"
-echo "    /vibecheck:review      — review changes for bugs before committing"
-echo "    /vibecheck:fix <ID>    — investigate and fix a flagged issue"
-echo "    /vibecheck:implement   — begin a spec with full context loaded"
-echo "    /vibecheck:improve     — refine skills based on session friction"
-echo "    /vibecheck:shape       — develop a context interactively"
+echo "    /vibe:check          — check your work at any phase before committing"
+echo "    /vibe:fix <ID>      — investigate and fix a flagged issue"
+echo "    /vibe:implement     — begin a spec with full context loaded"
+echo "    /vibe:improve       — refine skills based on session friction"
+echo "    /vibe:shape         — develop a context interactively"
 echo ""
 echo "  Context Library:"
-echo "    /vibecheck:create      — capture a note, issue, spec, or decision"
-echo "    /vibecheck:search      — find semantically related contexts"
-echo "    /vibecheck:contexts    — browse all contexts"
+echo "    /vibe:create        — capture a note, issue, spec, or decision"
+echo "    /vibe:search        — find semantically related contexts"
+echo "    /vibe:contexts      — browse all contexts"
 echo ""
 echo "  To uninstall: claude mcp remove vibecheck --scope user"
 echo ""
