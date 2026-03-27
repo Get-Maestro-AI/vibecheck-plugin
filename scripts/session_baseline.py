@@ -74,7 +74,7 @@ def main() -> None:
         sys.exit(0)
 
     # Collect git context
-    git_branch = run(["git", "branch", "--show-current"], cwd)
+    git_branch = run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd)
     git_status = run(["git", "status", "--short"], cwd)
     git_log = run(["git", "log", "--oneline", "-10"], cwd)
     git_remote = run(["git", "remote", "get-url", "origin"], cwd)
