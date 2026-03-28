@@ -1,7 +1,7 @@
 """Artifact manifest: tracks file → context mappings with content hashes.
 
-The manifest lives at <project>/.vibecheck/artifact-manifest.json and records
-which files have been captured into the Context Library.
+The manifest lives at ~/.vibecheck/{board_slug}/artifact-manifest.json (per-board,
+user-global). Legacy location: <project>/.vibecheck/artifact-manifest.json.
 
 Uses only stdlib. Never raises from public API — returns safe defaults on error.
 """
@@ -20,6 +20,7 @@ from typing import Any
 _MANIFEST_VERSION = 1
 _MANIFEST_DIR = ".vibecheck"
 _MANIFEST_FILE = "artifact-manifest.json"
+_VC_HOME = Path.home() / ".vibecheck"
 
 
 def content_hash(content: str) -> str:
@@ -37,14 +38,19 @@ def file_hash(file_path: str) -> str | None:
 
 
 def _manifest_path(cwd: str) -> Path:
-    """Return the manifest file path for a project directory."""
+    """Return the legacy manifest file path for a project directory."""
     return Path(cwd) / _MANIFEST_DIR / _MANIFEST_FILE
 
 
-def read_manifest(cwd: str) -> dict[str, Any]:
-    """Read the manifest for a project. Returns empty structure if missing."""
+def _board_manifest_path(board_slug: str) -> Path:
+    """Return the board-level manifest path: ~/.vibecheck/{board_slug}/artifact-manifest.json."""
+    return _VC_HOME / board_slug / _MANIFEST_FILE
+
+
+def read_manifest(cwd: str, board_slug: str | None = None) -> dict[str, Any]:
+    """Read the manifest. Prefers board-level path if board_slug provided, else legacy."""
     try:
-        mp = _manifest_path(cwd)
+        mp = _board_manifest_path(board_slug) if board_slug else _manifest_path(cwd)
         if not mp.exists():
             return {"version": _MANIFEST_VERSION, "artifacts": {}}
         with open(mp, "r", encoding="utf-8") as f:
@@ -56,10 +62,10 @@ def read_manifest(cwd: str) -> dict[str, Any]:
         return {"version": _MANIFEST_VERSION, "artifacts": {}}
 
 
-def write_manifest(cwd: str, manifest: dict[str, Any]) -> bool:
-    """Write the manifest atomically (write temp, rename). Returns success."""
+def write_manifest(cwd: str, manifest: dict[str, Any], board_slug: str | None = None) -> bool:
+    """Write the manifest atomically. Uses board-level path if board_slug provided."""
     try:
-        mp = _manifest_path(cwd)
+        mp = _board_manifest_path(board_slug) if board_slug else _manifest_path(cwd)
         mp.parent.mkdir(parents=True, exist_ok=True)
         # Atomic write: write to temp file in same dir, then rename
         fd, tmp_path = tempfile.mkstemp(
@@ -78,6 +84,26 @@ def write_manifest(cwd: str, manifest: dict[str, Any]) -> bool:
             except Exception:
                 pass
             return False
+    except Exception:
+        return False
+
+
+def migrate_manifest(cwd: str, board_slug: str) -> bool:
+    """Copy legacy manifest to board-level location if it exists and board copy doesn't.
+
+    Idempotent: no-ops if board manifest already exists. Does not delete legacy file.
+    Returns True if migration happened or board manifest already exists.
+    """
+    try:
+        board_mp = _board_manifest_path(board_slug)
+        if board_mp.exists():
+            return True  # Already migrated
+        legacy_mp = _manifest_path(cwd)
+        if not legacy_mp.exists():
+            return True  # Nothing to migrate
+        # Copy legacy → board location
+        legacy_data = read_manifest(cwd)
+        return write_manifest(cwd, legacy_data, board_slug=board_slug)
     except Exception:
         return False
 

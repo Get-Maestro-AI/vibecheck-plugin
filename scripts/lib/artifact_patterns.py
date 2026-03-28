@@ -85,6 +85,12 @@ def _classify(path: str, content: str | None) -> tuple[str, str] | None:
     if not path.endswith(".md"):
         return None
 
+    # Skip files under ~/.vibecheck/ — these are MCP transport files, not user artifacts
+    _vc_home = os.path.expanduser("~/.vibecheck/")
+    abs_path = os.path.abspath(os.path.expanduser(path))
+    if abs_path.startswith(_vc_home):
+        return None
+
     basename = os.path.basename(path)
 
     # Skip known non-artifact files

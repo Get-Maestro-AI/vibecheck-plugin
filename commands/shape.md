@@ -161,11 +161,17 @@ Continue until:
 
 ## Step 4 — Apply the final brief
 
-When the conversation is complete, apply the shaped brief to the context:
+When the conversation is complete, apply the shaped brief to the context. **Write to a file first to keep the MCP call compact:**
+
+1. Determine the file path: `~/.vibecheck/{board_slug}/docs/{LABEL}.md` where `board_slug` is the slugified board name (lowercase, hyphens — e.g., "VibeCheck" → "vibecheck") and `LABEL` is the context label (e.g., `SPEC-42`).
+2. Write the full shaped brief to that file using the Write tool.
+3. Call the MCP tool with the file path:
 
 ```
-vibecheck_update_context(id="<context_id>", brief_replace="<full shaped brief markdown>")
+vibecheck_update_context(id="<context_id>", brief_file="~/.vibecheck/{board_slug}/docs/{LABEL}.md")
 ```
+
+**Fallback:** If you don't know the board name, use `brief_replace` inline instead — it still works, just noisier in the terminal.
 
 The applied brief must match the output of the sub-specialist's methodology exactly — do not summarize.
 

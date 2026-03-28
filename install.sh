@@ -491,6 +491,9 @@ step "Installing slash commands"
 COMMANDS_DEST="$HOME/.claude/commands/vibe"
 mkdir -p "$COMMANDS_DEST"
 
+# Ensure ~/.vibecheck/ exists for board-level docs and manifests
+mkdir -p "$HOME/.vibecheck"
+
 # Clean up old vibecheck/ namespace directory if it exists.
 OLD_COMMANDS_DIR="$HOME/.claude/commands/vibecheck"
 if [[ -d "$OLD_COMMANDS_DIR" ]]; then

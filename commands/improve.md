@@ -38,7 +38,7 @@ Scan the session conversation for:
 For each skill with clear friction:
 - Load its full brief with `vibecheck_get_context`
 - Update `context_summary` if the trigger was wrong
-- Update `brief` via `vibecheck_update_context(brief_replace=...)` if the methodology caused friction
+- Update `brief`: write the revised brief to `~/.vibecheck/{board_slug}/docs/{LABEL}.md`, then call `vibecheck_update_context(id="<LABEL>", brief_file="~/.vibecheck/{board_slug}/docs/{LABEL}.md")`. Fallback: use `brief_replace=...` inline if board_slug is unknown.
 - Set `agent_updated_at` to current UTC ISO timestamp
 
 **Do NOT:**

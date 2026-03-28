@@ -28,6 +28,7 @@ from lib.manifest import (  # type: ignore[import]
     content_hash,
     file_hash,
     get_entry,
+    migrate_manifest,
     read_manifest,
     set_entry,
     to_relative,
@@ -48,6 +49,26 @@ def _write_pending_echo(message: str) -> None:
             f.write(message + "\n")
     except Exception:
         pass
+
+
+def _resolve_board_slug(cwd: str) -> str | None:
+    """Resolve board_slug from ~/.vibecheck/board-cache.json. Returns None if not cached."""
+    try:
+        cache_path = Path.home() / ".vibecheck" / "board-cache.json"
+        if not cache_path.is_file():
+            return None
+        with open(cache_path, "r") as f:
+            cache = json.load(f)
+        # Walk up CWD parents to find a match
+        path = cwd
+        while path and path != "/":
+            entry = cache.get(path)
+            if entry and isinstance(entry, dict):
+                return entry.get("board_slug")
+            path = os.path.dirname(path)
+    except Exception:
+        pass
+    return None
 
 
 def _extract_title(content: str, file_path: str) -> str:
@@ -214,8 +235,15 @@ def _run(hook_data: dict) -> None:
     # across sessions with different CWDs.
     manifest_key = file_path if rel_path.startswith("..") else rel_path
 
-    # Check manifest
-    manifest = read_manifest(cwd)
+    # Resolve board slug for board-level manifest
+    board_slug = _resolve_board_slug(cwd)
+
+    # Migrate legacy manifest to board-level location on first encounter
+    if board_slug:
+        migrate_manifest(cwd, board_slug)
+
+    # Check manifest (prefer board-level if available)
+    manifest = read_manifest(cwd, board_slug=board_slug)
 
     # One-time migration: re-key entries whose key starts with ".." to absolute paths.
     # Old code keyed out-of-CWD files by relative path (fragile "../../..." strings);
@@ -226,7 +254,7 @@ def _run(hook_data: dict) -> None:
         for old_key in stale_keys:
             abs_key = str((Path(cwd) / old_key).resolve())
             manifest["artifacts"][abs_key] = manifest["artifacts"].pop(old_key)
-        write_manifest(cwd, manifest)
+        write_manifest(cwd, manifest, board_slug=board_slug)
 
     entry = get_entry(manifest, manifest_key)
     current_hash = content_hash(content)
@@ -260,7 +288,7 @@ def _run(hook_data: dict) -> None:
         if resp:
             label = resp.get("label", context_label)
             set_entry(manifest, manifest_key, context_id, label, current_hash, context_type, session_id)
-            write_manifest(cwd, manifest)
+            write_manifest(cwd, manifest, board_slug=board_slug)
             echo = f"[VibeCheck] Artifact updated: [{context_type}] \"{title}\" ({label})\n  → {frontend_url}/#context/{label}"
             print(f"\n{echo}\n")
             _write_pending_echo(echo)
@@ -290,7 +318,7 @@ def _run(hook_data: dict) -> None:
             context_id = resp.get("id", "")
             label = resp.get("label", "")
             set_entry(manifest, manifest_key, context_id, label, current_hash, context_type, session_id)
-            write_manifest(cwd, manifest)
+            write_manifest(cwd, manifest, board_slug=board_slug)
             echo = f"[VibeCheck] Artifact captured: [{context_type}] \"{title}\" ({label})\n  → {frontend_url}/#context/{label}"
             print(f"\n{echo}\n")
             _write_pending_echo(echo)

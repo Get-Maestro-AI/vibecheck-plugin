@@ -117,12 +117,19 @@ if not plan_type:
 if not plan_type:
     plan_type = "feature-plan"
 
-# Accept override or free-text description from $ARGUMENTS
+# Accept override, label, or free-text description from $ARGUMENTS
 import sys
 arg = "$ARGUMENTS".strip()
+arg_is_label = bool(re.match(r'^[A-Z]+-\d+$', arg)) if arg else False
+
 if arg and arg.endswith("-plan"):
     plan_type = arg
     print(f"Plan type overridden by argument: {plan_type}")
+elif arg_is_label:
+    # Label provided (e.g. /vibe:plan SPEC-482) — resolve directly
+    if not active_spec_id:
+        active_spec_id = arg
+    print(f"Context label: {arg}")
 elif arg:
     # Free-text task description (e.g. /vibe:plan "I want to build X")
     # Use as objective title if no session objective exists
@@ -131,10 +138,22 @@ elif arg:
     print(f"Task description: {arg}")
 
 print(f"Suggested plan type: {plan_type}")
-print(f"Has spec: {'yes' if active_spec_id else 'no'}")
+print(f"Has spec: {'yes — ' + active_spec_id if active_spec_id else 'no'}")
 print(f"Has saved plan: {'yes' if saved_plan else 'no'}")
 PY
 `
+
+---
+
+## Phase 1a — Load spec (if label provided)
+
+If Phase 1 output shows "Has spec: yes" with a label (e.g., `SPEC-482`), **load it directly** — do not search:
+
+```
+vibecheck_get_context(id="<label>")
+```
+
+This gives you the full spec brief to inform the plan. A direct label lookup is always preferred over `vibecheck_discover` when you have the label.
 
 ---
 
@@ -174,7 +193,7 @@ Call `vibecheck_discover` to find matching specialists. **Use a short, action-fo
 vibecheck_discover(query="<plan-type>", layer="skill", skill_type="plan", limit=4)
 ```
 
-Examples of good queries: `"feature-plan"`, `"debug-plan"`, `"design-plan"`. Do NOT include the objective title or task description in the query — domain-specific terms dilute relevance and cause mismatches.
+Examples of good queries: `"feature plan"`, `"debug plan"`, `"design plan"`. Use natural words, not hyphenated slugs — `"feature plan"` matches better than `"feature-plan"`. Do NOT include the objective title or task description in the query — domain-specific terms dilute relevance and cause mismatches.
 
 **For each skill you decide to use, call `vibecheck_get_context(id)` to load its full brief.** The brief defines the specialist methodology — follow it exactly. Do not substitute your general knowledge for the skill's specific approach.
 
@@ -186,13 +205,15 @@ Examples of good queries: `"feature-plan"`, `"debug-plan"`, `"design-plan"`. Do 
 
 **Override:** if `$ARGUMENTS` contains a plan type (e.g., `/vibe:plan architecture`), use that type regardless of what discover returns.
 
-**Fallback — always load SKL-178, never drop to built-in:** If `vibecheck_discover` returns no results, returns results with no `skill_type=plan` match, or returns only unrelated skills, explicitly load `SKL-178` (feature-plan) as the default:
+**Fallback — discover by tag, never drop to built-in:** If the first `vibecheck_discover` returns no results or no `skill_type=plan` match, retry with a broader query:
 
 ```
-vibecheck_get_context("SKL-178")
+vibecheck_discover(query="feature plan implementation", type="skill", limit=5)
 ```
 
-Do not fall through to the Built-in Methodologies section. SKL-178 is the floor. Built-in prose is only used if VibeCheck is completely unreachable.
+If that still returns nothing, fall back to the Built-in Methodologies section below. Built-in prose is the last resort — only use it if VibeCheck is completely unreachable or has no plan skills at all.
+
+**Never hardcode a skill label (e.g., SKL-NNN) in instructions.** Labels are ephemeral — they change when skills are re-seeded. Use discover queries or stable tags (e.g., `default-skill:plan-feature`) instead.
 
 ---
 
@@ -241,7 +262,10 @@ When the user approves the plan, **before calling ExitPlanMode**:
 
 1. **Extract the plan title** from the plan's first `##` heading (e.g., `## Plan: Self-Improvement Loop v2` → title is `"Plan: Self-Improvement Loop v2"`). This is the canonical title — do NOT use the Claude Code plan filename (e.g., "valiant-enchanting-globe") as the title.
 
-2. Save to the Context Library:
+2. Save to the Context Library. **Write to file first to keep the MCP call compact:**
+
+   a. Write the full plan markdown to `~/.vibecheck/{board_slug}/docs/temp-plan.md` (board_slug is the slugified board name).
+   b. Call the MCP tool with the file path:
 
 ```
 vibecheck_create_context(
@@ -249,10 +273,12 @@ vibecheck_create_context(
     title="<title from the plan's first ## heading>",
     context_summary="<one sentence: what this plan is for>",
     tags=["plan", "<plan-type>"],
-    brief=<full plan markdown>,
+    brief_file="~/.vibecheck/{board_slug}/docs/temp-plan.md",
     predecessor_id=<active_spec_id or objective_id if available>
 )
 ```
+
+   **Fallback:** If board_slug is unknown, pass `brief=<full plan markdown>` inline instead.
 
 3. Report the plan label to the user: **"Plan saved as PLN-XX."** Include the Claude Code plan file reference for cross-referencing (e.g., "Claude Code plan ref: valiant-enchanting-globe").
 

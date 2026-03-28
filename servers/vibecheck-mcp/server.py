@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -206,6 +207,74 @@ def post_mcp_report(report_data: dict) -> dict:
     return _post_to_targets("/api/push/mcp-report", report_data, timeout=5)
 
 
+def _slugify(name: str) -> str:
+    """Convert 'VibeCheck' -> 'vibecheck', 'My Cool App' -> 'my-cool-app'."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+# ── Board slug cache ──────────────────────────────────────────────────────────
+_BOARD_SLUG_CACHE: dict[str, str] = {}  # cwd -> board_slug (in-memory)
+_BOARD_CACHE_PATH = os.path.expanduser("~/.vibecheck/board-cache.json")
+
+
+def _read_board_cache() -> dict:
+    """Read the on-disk board cache, or return empty dict."""
+    try:
+        if os.path.isfile(_BOARD_CACHE_PATH):
+            with open(_BOARD_CACHE_PATH, "r") as f:
+                return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        pass
+    return {}
+
+
+def _write_board_cache(cache: dict) -> None:
+    """Write the board cache to disk atomically."""
+    try:
+        os.makedirs(os.path.dirname(_BOARD_CACHE_PATH), exist_ok=True)
+        tmp = _BOARD_CACHE_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(cache, f, indent=2)
+        os.replace(tmp, _BOARD_CACHE_PATH)
+    except OSError:
+        pass
+
+
+def _cache_board_info(cwd: str, board_slug: str, board_name: str, board_id: str) -> None:
+    """Update both in-memory and on-disk board caches."""
+    from datetime import datetime, timezone
+    _BOARD_SLUG_CACHE[cwd] = board_slug
+    cache = _read_board_cache()
+    cache[cwd] = {
+        "board_slug": board_slug,
+        "board_name": board_name,
+        "board_id": board_id,
+        "resolved_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    _write_board_cache(cache)
+
+    # Ensure the board docs directory exists
+    docs_dir = os.path.expanduser(f"~/.vibecheck/{board_slug}/docs")
+    os.makedirs(docs_dir, exist_ok=True)
+
+
+def _get_board_slug(cwd: str) -> str:
+    """Resolve board_slug for a CWD. Memory cache -> disk cache -> fallback."""
+    if cwd in _BOARD_SLUG_CACHE:
+        return _BOARD_SLUG_CACHE[cwd]
+    # Walk up CWD parents in disk cache
+    cache = _read_board_cache()
+    path = cwd
+    while path and path != "/":
+        if path in cache:
+            slug = cache[path]["board_slug"]
+            _BOARD_SLUG_CACHE[cwd] = slug
+            return slug
+        path = os.path.dirname(path)
+    # Ultimate fallback: slugified basename
+    return _slugify(os.path.basename(cwd) or "unknown")
+
+
 def _resolve_session_id() -> str:
     """Resolve the current session_id via PPID lookup.
 
@@ -228,6 +297,16 @@ def _resolve_session_id() -> str:
         result = _api_call("GET", f"/api/session-by-ppid/{ppid}", timeout=2)
         resolved = result.get("session_id")
         if resolved and resolved != "unknown":
+            # Cache board info if returned
+            board_slug = result.get("board_slug")
+            if board_slug:
+                cwd = os.environ.get("CLAUDE_CWD", os.getcwd())
+                _cache_board_info(
+                    cwd,
+                    board_slug,
+                    result.get("board_name", ""),
+                    result.get("board_id", ""),
+                )
             return resolved
     except Exception:
         pass
@@ -468,7 +547,11 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "brief": {
                         "type": "string",
-                        "description": "Markdown content for the brief",
+                        "description": "Markdown content for the brief (mutually exclusive with brief_file)",
+                    },
+                    "brief_file": {
+                        "type": "string",
+                        "description": "Absolute path to a file containing brief content. Mutually exclusive with brief.",
                     },
                     "type": {
                         "type": "string",
@@ -523,11 +606,15 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "brief_replace": {
                         "type": "string",
-                        "description": "Replace the entire brief content (mutually exclusive with brief_append)",
+                        "description": "Replace the entire brief content (mutually exclusive with brief_append and brief_file)",
                     },
                     "brief_append": {
                         "type": "string",
                         "description": "Content to append to the brief (not replace)",
+                    },
+                    "brief_file": {
+                        "type": "string",
+                        "description": "Absolute path to a file containing brief content. Replaces brief. Mutually exclusive with brief_replace and brief_append.",
                     },
                     "tags": {
                         "type": "array",
@@ -1039,10 +1126,28 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     if name == "vibecheck_create_context":
         session_id, cwd = _get_session_context()
+
+        # Resolve brief content: brief_file takes priority, mutually exclusive with brief
+        brief_content = arguments.get("brief", "")
+        if arguments.get("brief_file"):
+            if arguments.get("brief"):
+                return [types.TextContent(
+                    type="text",
+                    text="Error: brief and brief_file are mutually exclusive.",
+                )]
+            file_path = os.path.expanduser(arguments["brief_file"])
+            if not os.path.isfile(file_path):
+                return [types.TextContent(
+                    type="text",
+                    text=f"Error: brief_file not found: {file_path}",
+                )]
+            with open(file_path, "r") as f:
+                brief_content = f.read()
+
         payload = {
             "title": arguments.get("title", ""),
             "type": arguments.get("type", "note"),
-            "brief": arguments.get("brief", ""),
+            "brief": brief_content,
             "created_by": "agent",
             "source_type": "agent",
         }
@@ -1094,10 +1199,14 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         ctx_id = url_quote(arguments.get("id", ""), safe="")
 
         # Mutual exclusion check
-        if arguments.get("brief_append") and arguments.get("brief_replace") is not None:
+        brief_fields = [
+            k for k in ("brief_replace", "brief_append", "brief_file")
+            if arguments.get(k) is not None
+        ]
+        if len(brief_fields) > 1:
             return [types.TextContent(
                 type="text",
-                text="Error: brief_append and brief_replace are mutually exclusive.",
+                text=f"Error: {' and '.join(brief_fields)} are mutually exclusive.",
             )]
 
         # Build PATCH payload for field updates
@@ -1115,8 +1224,17 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         if "source_snapshot" in arguments:
             patch["source_snapshot"] = arguments["source_snapshot"]
 
-        # Brief handling: replace or append
-        if arguments.get("brief_replace") is not None:
+        # Brief handling: file, replace, or append
+        if arguments.get("brief_file"):
+            file_path = os.path.expanduser(arguments["brief_file"])
+            if not os.path.isfile(file_path):
+                return [types.TextContent(
+                    type="text",
+                    text=f"Error: brief_file not found: {file_path}",
+                )]
+            with open(file_path, "r") as f:
+                patch["brief"] = f.read()
+        elif arguments.get("brief_replace") is not None:
             patch["brief"] = arguments["brief_replace"]
         elif arguments.get("brief_append"):
             existing = _api_call("GET", f"/api/contexts/{ctx_id}")
