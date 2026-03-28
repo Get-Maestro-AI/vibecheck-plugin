@@ -473,8 +473,10 @@ Reporting checkpoints are mandatory at each of these moments:
 - After each file edit or completed subtask: call vibecheck_update with what changed.
 - On every phase change (planning → implementing → debugging → reviewing): call vibecheck_update.
 - Before your final response in the conversation: call vibecheck_update with status "done".
-- After drafting a spec or plan: run /vibe:check to check quality before continuing.
+- After drafting a spec: run /vibe:check to check quality before continuing.
+- After drafting a plan: run /vibe:check to check quality before continuing.
 - After completing each implementation task: run /vibe:check to catch issues before committing.
+- After /vibe:check on a Build phase (i.e. a big chunk of implementation work): run /vibe:improve to refine skills based on session friction.
 - After fixing any review-flagged issue: call vibecheck_resolve to mark it fixed on the dashboard.
 - When a spec or plan has been fully implemented: update its status to "done" via vibecheck_update_context.
 Minimum cadence: if 5 minutes of active work pass without a checkpoint, you are behind. Report now.
