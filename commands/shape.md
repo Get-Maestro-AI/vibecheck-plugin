@@ -14,14 +14,9 @@ Shape a VibeCheck context through an interactive conversation.
    ("Mara", "design specialist", "Marcus", "product specialist", "CEO specialist")?
    If yes, skip all routing logic — load that specialist directly (Step 2) and proceed.
 
-2. **Restart intent:** Does the input contain "start over", "restart", "fresh",
-   "from scratch", or similar? If yes AND a prior shape_conversation exists on the
-   context, confirm once: "You have a prior shaping conversation. Start over?".
-   If confirmed, call `vibecheck_shape_clear(id="<context_id>")`, then proceed with an empty conversation.
-
-3. **Reachability check:** Call GET /api/status. If it fails, wait 2 seconds and retry once.
+2. **Reachability check:** Call GET /api/status. If it fails, wait 2 seconds and retry once.
    If it fails again (connection refused, timeout, or error response):
-   enter degraded mode — tell the user, shape in-memory, skip turn logging.
+   enter degraded mode — tell the user, shape in-memory.
    Do NOT abort. See "Degraded Mode" section.
 
 ---
@@ -82,8 +77,6 @@ Read the context type and existing brief/conversation. Route to sub-specialist b
 - `type=spec` with strategy signals → `ceo-specialist`
 - `type=spec` or `type=issue` with user/problem signals → `product-specialist`
 - No clear signal → ask: "Is this mainly design direction, strategy/scope, or user problem?"
-
-If the context has an existing `shape_conversation`, resume from where it left off — do not restart.
 
 **If the resolved context has `type=issue`:**
 1. Tell the user: "This is an issue — shaping it will produce a new spec. The issue will be linked as a predecessor."
@@ -160,26 +153,6 @@ Run the shaping conversation in-skill using the loaded sub-specialist's methodol
 - Challenge vague language — "improve" and "uplift" are not specs
 - Do not recap what the user just said — move forward
 
-**When resuming a prior conversation with more than 8 turns:**
-Before asking anything, produce a bullet summary:
-"Based on our last session, here's what we established:
- - [settled Q1 answer]
- - [settled Q2 answer]
- - [any scope decisions made]
-Resuming from: [last open question or decision point]."
-
-Do not re-ask any question that has a clear answer in the prior conversation.
-If the prior conversation is contradictory (user may have changed their mind),
-surface it: "Last time we said X — does that still stand?"
-
-Log each turn to VibeCheck for persistence:
-
-```
-vibecheck_shape_message(id="<context_id>", role="<user|assistant>", content="<message content>")
-```
-
-This is persistence-only — the server does NOT generate responses. You are the reasoning engine.
-
 Continue until:
 - The user says they're done ("that's enough", "done", "finish", "ship it")
 - The sub-specialist's output is complete (e.g. product brief, strategic brief, or DESIGN.md drafted)
@@ -211,14 +184,14 @@ The applied brief must match the output of the sub-specialist's methodology exac
 
 ## Degraded Mode (VibeCheck unreachable)
 
-When shape/init fails or the API is unreachable:
+When the API is unreachable:
 
 1. Tell the user: "VibeCheck isn't reachable — shaping in-memory. I'll offer to persist when available."
-2. Proceed with the full shaping conversation. Skip all shape/message logging.
+2. Proceed with the full shaping conversation.
 3. At the end, present the shaped brief as markdown.
 4. Offer: "VibeCheck is still unreachable. Here's the brief — paste it into the context manually, or retry when the server is back."
 
-Shape always works. The server is for persistence, not for the conversation.
+Shape always works. The server is for the brief, not the conversation.
 
 ---
 

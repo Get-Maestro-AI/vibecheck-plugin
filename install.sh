@@ -396,8 +396,6 @@ VIBECHECK_PERMISSIONS = [
     "mcp__vibecheck__vibecheck_implement",
     "mcp__vibecheck__vibecheck_begin_completion",
     "mcp__vibecheck__vibecheck_finalize_objective",
-    "mcp__vibecheck__vibecheck_shape_message",
-    "mcp__vibecheck__vibecheck_shape_clear",
 ]
 
 perms = settings.setdefault("permissions", {})
