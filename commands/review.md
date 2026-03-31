@@ -206,14 +206,14 @@ PY
 
 ## Phase 2 — Discover and load check skills
 
-Route to check skills using the **heuristic check types** from Phase 1 output. `vibe:check` routes only within the Check phase — it discovers check-type skills (security, architecture, code, design, etc.) based on the files changed.
+Route to check skills using the **heuristic check types** from Phase 1 output. `vibe:review` routes only within the Review phase — it discovers review-type skills (security, architecture, code, design, etc.) based on the files changed.
 
-> **Note:** `vibe:check` is scoped to quality checks only. For spec review use `vibe:shape`, for plan review use `vibe:plan`, for build guidance use `vibe:build`. Each phase has its own command.
+> **Note:** `vibe:review` is scoped to quality checks only. For spec shaping use `vibe:think`, for plan review use `vibe:plan`, for build guidance use `vibe:build`. Each phase has its own command.
 
 Read the "Heuristic check types" line from Phase 1. Use it to build the discovery query:
 
 ```
-vibecheck_discover(query="check <heuristic check types from Phase 1>", layer="skill", skill_type="check", situation="Check phase — reviewing <summary of changes>", limit=4)
+vibecheck_discover(query="review <heuristic check types from Phase 1>", layer="skill", skill_type="review", situation="Review phase — reviewing <summary of changes>", limit=4)
 ```
 
 **For every skill returned, you MUST call `vibecheck_get_context(id)` to load the full brief.** Do not rely on the context_summary snippet from the discover result — it is not the methodology, it is a description of when to use the skill. Do not skip this step because you already know what "security check" or "code check" means. The brief defines the specific methodology to follow; your general knowledge does not substitute for it.
