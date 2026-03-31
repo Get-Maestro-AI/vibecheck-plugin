@@ -536,7 +536,8 @@ async def list_tools() -> list[types.Tool]:
                 "Create a new context in the VibeCheck Context Library. "
                 "Use this to capture decisions, file issues, create notes, or save plans during a session. "
                 "Defaults to type='note' for quick capture. Set type='decision' for architectural "
-                "decisions, type='issue' for discovered gaps, type='plan' for implementation plans."
+                "decisions, type='issue' for discovered gaps (creates an ISS-X board item), "
+                "type='plan' for implementation plans."
             ),
             inputSchema={
                 "type": "object",
@@ -1161,23 +1162,43 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             payload["skill_allowed_tools"] = arguments["skill_allowed_tools"]
         if "always_inject" in arguments:
             payload["always_inject"] = arguments["always_inject"]
-        result = _api_call("POST", "/api/contexts", payload)
-        if result.get("error"):
-            return [types.TextContent(type="text", text=f"Failed to create context: {result['error']}")]
+        ctx_type = arguments.get("type", "note")
 
-        # Link the new context to the current session
-        ctx_id = result.get("id")
-        if ctx_id and session_id and session_id != "unknown":
-            # Issues get a distinct link_type so they surface in the Issues section
-            auto_link_type = "issue_created" if arguments.get("type") == "issue" else "created_in"
-            _api_call("POST", f"/api/contexts/{ctx_id}/link-session", {
-                "session_id": session_id,
-                "link_type": auto_link_type,
-            })
+        # Issues are first-class Items — route transparently to the item creation API
+        if ctx_type == "issue":
+            issue_payload = {
+                "title": payload["title"],
+                "brief": payload.get("brief", ""),
+                "tags": payload.get("tags"),
+                "source_type": "agent",
+                "created_by": "agent",
+                "project_path": cwd,
+            }
+            result = _api_call("POST", "/api/items/issues", issue_payload)
+            if result.get("error"):
+                return [types.TextContent(type="text", text=f"Failed to create issue: {result['error']}")]
+            ctx_id = result.get("id")
+            if ctx_id and session_id and session_id != "unknown":
+                _api_call("POST", f"/api/items/{ctx_id}/link-session", {
+                    "session_id": session_id,
+                    "link_type": "found_in",
+                })
+        else:
+            result = _api_call("POST", "/api/contexts", payload)
+            if result.get("error"):
+                return [types.TextContent(type="text", text=f"Failed to create context: {result['error']}")]
+
+            # Link the new context to the current session
+            ctx_id = result.get("id")
+            if ctx_id and session_id and session_id != "unknown":
+                _api_call("POST", f"/api/contexts/{ctx_id}/link-session", {
+                    "session_id": session_id,
+                    "link_type": "created_in",
+                })
 
         label = result.get("label", "")
         id_str = f"{label} / {result.get('id', '')}" if label else result.get("id", "")
-        ctx_type = result.get("type", "note")
+        ctx_type = result.get("item_type") or result.get("type") or ctx_type
         title = result.get("title", "")
 
         if label:
