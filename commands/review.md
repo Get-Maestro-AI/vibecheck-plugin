@@ -216,7 +216,7 @@ Read the "Heuristic check types" line from Phase 1. Use it to build the discover
 vibecheck_discover(query="review <heuristic check types from Phase 1>", layer="skill", skill_type="review", situation="Review phase — reviewing <summary of changes>", limit=4)
 ```
 
-**For every skill returned, you MUST call `vibecheck_get_context(id)` to load the full brief.** Do not rely on the context_summary snippet from the discover result — it is not the methodology, it is a description of when to use the skill. Do not skip this step because you already know what "security check" or "code check" means. The brief defines the specific methodology to follow; your general knowledge does not substitute for it.
+**For every skill returned, you MUST call `vibecheck_get(id)` to load the full brief.** Do not rely on the context_summary snippet from the discover result — it is not the methodology, it is a description of when to use the skill. Do not skip this step because you already know what "security check" or "code check" means. The brief defines the specific methodology to follow; your general knowledge does not substitute for it.
 
 **Merge logic:**
 - `code-check` is always required when the diff contains any code files (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, etc.). Do not drop it because a more specific check type was discovered.

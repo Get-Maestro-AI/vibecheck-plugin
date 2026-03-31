@@ -476,20 +476,24 @@ async def list_tools() -> list[types.Tool]:
         ),
         # ── Context Library tools ────────────────────────────────────────────
         types.Tool(
-            name="vibecheck_list_contexts",
+            name="vibecheck_list",
             description=(
-                "List contexts from the VibeCheck Context Library. Returns id, title, type, status, and brief preview for each context. "
-                "Use this to find specs to implement, issues to fix, or decisions to reference. "
-                "By default returns all statuses except archived — open and done contexts are all visible. "
-                "Pass status= to filter to a specific status."
+                "List VibeCheck entities. Defaults to Context Library contexts (specs, decisions, notes, plans). "
+                "Pass entity_type='items' to list board Items (issues). "
+                "Use this to browse what exists, find specs to implement, or see open issues."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "entity_type": {
+                        "type": "string",
+                        "enum": ["contexts", "items"],
+                        "description": "What to list: 'contexts' (default) for the Context Library, 'items' for board Items (issues)",
+                    },
                     "type": {
                         "type": "string",
-                        "enum": ["research", "spec", "issue", "decision", "note", "standard", "skill", "persona"],
-                        "description": "Filter by context type",
+                        "enum": ["research", "spec", "decision", "note", "standard", "skill", "persona", "plan"],
+                        "description": "Filter contexts by type (ignored when entity_type='items')",
                     },
                     "status": {
                         "type": "string",
@@ -507,7 +511,7 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
-            name="vibecheck_get_context",
+            name="vibecheck_get",
             description=(
                 "Get detail for a context. By default returns full content including brief, "
                 "status history, and linked sessions. Set summary_only=True for tier-2 "
@@ -531,13 +535,12 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
-            name="vibecheck_create_context",
+            name="vibecheck_create",
             description=(
-                "Create a new context in the VibeCheck Context Library. "
-                "Use this to capture decisions, file issues, create notes, or save plans during a session. "
-                "Defaults to type='note' for quick capture. Set type='decision' for architectural "
-                "decisions, type='issue' for discovered gaps (creates an ISS-X board item), "
-                "type='plan' for implementation plans."
+                "Create a new VibeCheck entity. "
+                "Context Library types (spec, plan, decision, note, research, standard, skill): stored in the Context Library with label SPEC-X, PLN-X, etc. "
+                "type='issue': creates a first-class board Item with label ISS-X — use for discovered bugs, gaps, or follow-up work. "
+                "Defaults to type='note' for quick capture."
             ),
             inputSchema={
                 "type": "object",
@@ -584,15 +587,25 @@ async def list_tools() -> list[types.Tool]:
                             "Only applies to standard-layer contexts."
                         ),
                     },
+                    "when_conditions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "For type=skill: list of 'use when...' trigger conditions evaluated at "
+                            "phase dispatch time. Each string describes a specific session state that "
+                            "warrants this skill (e.g. 'when prompt construction files are modified')."
+                        ),
+                    },
                 },
                 "required": ["title"],
             },
         ),
         types.Tool(
-            name="vibecheck_update_context",
+            name="vibecheck_patch",
             description=(
-                "Update an existing context. Can change title, replace or append to brief, "
-                "update tags, toggle always_inject, change status, or add notes to the status history."
+                "Update an existing context or Item. Can change title, replace or append to brief, "
+                "update tags, toggle always_inject, change status, or add notes to the status history. "
+                "Pass an ISS-X label to update a board Item; pass any other label or UUID to update a Context."
             ),
             inputSchema={
                 "type": "object",
@@ -655,6 +668,14 @@ async def list_tools() -> list[types.Tool]:
                             "Triggers the 'Improved by VibeCheck' badge in the Context Library."
                         ),
                     },
+                    "when_conditions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "For type=skill: replace the full list of 'use when...' trigger conditions "
+                            "evaluated at phase dispatch time."
+                        ),
+                    },
                 },
                 "required": ["id"],
             },
@@ -663,7 +684,7 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_link_context",
             description=(
                 "Manually link the current session to a context. Most tools "
-                "(vibecheck_get_context, vibecheck_update_context, vibecheck_implement) "
+                "(vibecheck_get, vibecheck_update, vibecheck_implement) "
                 "link automatically — use this only when you need to explicitly record "
                 "that a context is relevant to this session without reading or updating it."
             ),
@@ -724,13 +745,57 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="vibecheck_dispatch_phase",
+            description=(
+                "Select 0–3 skills to execute as a skill chain for the current workflow phase. "
+                "Call at the start of any phase skill (review, build, plan, etc.) to get a "
+                "context-aware selection of subskills based on what changed in this session. "
+                "Returns selected skills with reasons, per-skill focus notes, and chain execution "
+                "instructions. Always echo the returned skill chain to the user before executing. "
+                "If the returned list is empty, proceed with a general phase execution."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "phase": {
+                        "type": "string",
+                        "description": "The current workflow phase (e.g. 'review', 'build', 'plan', 'test', 'ship', 'reflect', 'think')",
+                    },
+                    "objective": {
+                        "type": "string",
+                        "description": "Current objective title or description",
+                    },
+                    "files_changed": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of file paths changed in this session/objective",
+                    },
+                    "active_spec_id": {
+                        "type": "string",
+                        "description": "Active spec label (e.g. 'SPEC-42') if one is being implemented",
+                    },
+                    "recent_subtasks": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Completed subtask descriptions from this session",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Repo/tech tags for this session (e.g. 'python', 'react')",
+                    },
+                },
+                "required": ["phase"],
+            },
+        ),
+        types.Tool(
             name="vibecheck_discover",
             description=(
                 "Discover relevant contexts (skills, decisions, standards, research) from the "
                 "VibeCheck Context Library using hybrid BM25+vector scoring. Call before "
                 "starting any non-trivial task to surface relevant methodology, prior decisions, "
-                "or research. Returns a ranked list of matches — use vibecheck_get_context with "
-                "summary_only=True to evaluate a match, or vibecheck_get_context to load full "
+                "or research. Returns a ranked list of matches — use vibecheck_get with "
+                "summary_only=True to evaluate a match, or vibecheck_get to load full "
                 "content. For skills specifically, pass layer='skill'."
             ),
             inputSchema={
@@ -912,7 +977,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 "**VibeCheck reflect pass:** Before responding to the user, run the reflect pass — "
                 "call vibecheck_discover(query=\"reflect skill methodology\", layer=\"skill\", skill_type=\"reflect\") "
                 "to find the right reflect specialist(s), load each matched skill's full brief with "
-                "vibecheck_get_context(id), then follow its methodology. "
+                "vibecheck_get(id), then follow its methodology. "
                 "This is how VibeCheck gets smarter each session."
             ))]
         return [types.TextContent(
@@ -937,7 +1002,27 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     # ── Context Library tool handlers ────────────────────────────────────────
 
-    if name == "vibecheck_list_contexts":
+    if name == "vibecheck_list":
+        entity_type = arguments.get("entity_type", "contexts")
+        limit = arguments.get("limit", 10)
+
+        if entity_type == "items":
+            params = [f"limit={limit}"]
+            if arguments.get("status"):
+                params.append(f"status={arguments['status']}")
+            qs = "&".join(params)
+            result = _api_call("GET", f"/api/items?{qs}")
+            items = result.get("items", result if isinstance(result, list) else [])
+            if not items:
+                return [types.TextContent(type="text", text="No items found.")]
+            lines = []
+            for item in items:
+                label = item.get("label", "")
+                status = item.get("status", "")
+                lines.append(f"- **{item['title']}** ({label}) status={status}")
+            return [types.TextContent(type="text", text="\n".join(lines))]
+
+        # Default: contexts
         params = []
         if arguments.get("type"):
             params.append(f"type={arguments['type']}")
@@ -945,7 +1030,6 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             params.append(f"status={arguments['status']}")
         if arguments.get("tag"):
             params.append(f"tag={arguments['tag']}")
-        limit = arguments.get("limit", 10)
         params.append(f"limit={limit}")
         qs = "&".join(params)
         result = _api_call("GET", f"/api/contexts?{qs}")
@@ -961,9 +1045,36 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append(f"- [{c['type']}] **{c['title']}** ({status}) id={id_str}\n  {preview}")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
-    if name == "vibecheck_get_context":
-        ctx_id = url_quote(arguments.get("id", ""), safe="")
+    if name == "vibecheck_get":
+        raw_id = arguments.get("id", "")
         summary_only = arguments.get("summary_only", False)
+
+        # Route Items (ISS-X labels) to the items API
+        is_item = raw_id.upper().startswith("ISS-")
+        if is_item:
+            item_id = url_quote(raw_id, safe="")
+            result = _api_call("GET", f"/api/items/{item_id}")
+            if result.get("error") or not result.get("id"):
+                return [types.TextContent(type="text", text=f"Item not found: {raw_id}")]
+            if session_id and session_id != "unknown":
+                try:
+                    _api_call("POST", f"/api/items/{result['id']}/link-session", {
+                        "session_id": session_id,
+                        "link_type": "read_in",
+                    })
+                except Exception:
+                    pass
+            label = result.get("label", raw_id)
+            lines = [
+                f"# {label} — {result['title']}",
+                f"**Type:** issue | **Status:** {result.get('status', '')}",
+            ]
+            if result.get("brief"):
+                lines.append(f"\n## Brief\n{result['brief']}")
+            return [types.TextContent(type="text", text="\n".join(lines))]
+
+        # Default: Context Library
+        ctx_id = url_quote(raw_id, safe="")
         url_suffix = "?summary_only=true" if summary_only else ""
         result = _api_call("GET", f"/api/contexts/{ctx_id}{url_suffix}")
         if result.get("error") or not result.get("id"):
@@ -993,7 +1104,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         if summary_only:
             summary = result.get("context_summary") or "(no summary yet)"
             lines.append(f"\n**Summary:** {summary}")
-            lines.append("\n*Use vibecheck_get_context(id) to load the full brief.*")
+            lines.append("\n*Use vibecheck_get(id) to load the full brief.*")
         else:
             if result.get("predecessor_id"):
                 lines.append(f"**Predecessor:** {result['predecessor_id']}")
@@ -1026,6 +1137,57 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                             lines.append(f"- {title}{note}")
                 else:
                     lines.append(f"\n*0 sessions touched this in the last {lookback} days.*")
+
+        return [types.TextContent(type="text", text="\n".join(lines))]
+
+    if name == "vibecheck_dispatch_phase":
+        phase = (arguments.get("phase") or "").strip()
+        if not phase:
+            return [types.TextContent(type="text", text="Error: phase is required.")]
+
+        payload: dict = {"phase": phase}
+        if arguments.get("objective"):
+            payload["objective"] = arguments["objective"]
+        if arguments.get("files_changed"):
+            payload["files_changed"] = arguments["files_changed"]
+        if arguments.get("active_spec_id"):
+            payload["active_spec_id"] = arguments["active_spec_id"]
+        if arguments.get("recent_subtasks"):
+            payload["recent_subtasks"] = arguments["recent_subtasks"]
+        if arguments.get("tags"):
+            payload["tags"] = arguments["tags"]
+
+        result = _api_call("POST", "/api/contexts/phase-dispatch", payload)
+        if result.get("error"):
+            return [types.TextContent(type="text", text=f"Phase dispatch failed: {result['error']}")]
+
+        selected = result.get("selected", [])
+        chain_instructions = result.get("chain_instructions")
+        fallback = result.get("fallback", False)
+
+        if not selected:
+            return [types.TextContent(
+                type="text",
+                text=(
+                    f"[VibeCheck] Phase: {phase} — no skill chain applies.\n"
+                    "Proceed with a general phase execution."
+                ),
+            )]
+
+        lines = [f"[VibeCheck] Phase: {phase} — skill chain ({len(selected)} skill{'s' if len(selected) != 1 else ''}):"]
+        for i, s in enumerate(selected, 1):
+            lines.append(f"  {i}. {s['title']} ({s['label']}) — {s['reason']}")
+            if s.get("focus"):
+                lines.append(f"     Focus: {s['focus']}")
+
+        if chain_instructions:
+            lines.append(f"\nChain instructions: {chain_instructions}")
+
+        lines.append(
+            "\nEcho this skill chain to the user before executing. "
+            "Load each skill brief with vibecheck_get and follow its methodology. "
+            "Output a ## section header per skill."
+        )
 
         return [types.TextContent(type="text", text="\n".join(lines))]
 
@@ -1096,7 +1258,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             if c.get("why_now"):
                 lines.append(f"**Why now:** {c['why_now']}")
             if type_str == "skill":
-                lines.append(f"*Activate with: `vibecheck_get_context(\"{c.get('id', label)}\")` then follow the brief.*")
+                lines.append(f"*Activate with: `vibecheck_get(\"{c.get('id', label)}\")` then follow the brief.*")
             lines.append("")
         # Session history section
         session_matches = result.get("session_matches", [])
@@ -1122,10 +1284,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
         # Single CTA
         lines.append("---")
-        lines.append("Evaluate a match: `vibecheck_get_context(id, summary_only=True)` · Load full brief: `vibecheck_get_context(id)`")
+        lines.append("Evaluate a match: `vibecheck_get(id, summary_only=True)` · Load full brief: `vibecheck_get(id)`")
         return [types.TextContent(type="text", text="\n".join(lines))]
 
-    if name == "vibecheck_create_context":
+    if name == "vibecheck_create":
         session_id, cwd = _get_session_context()
 
         # Resolve brief content: brief_file takes priority, mutually exclusive with brief
@@ -1162,6 +1324,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             payload["skill_allowed_tools"] = arguments["skill_allowed_tools"]
         if "always_inject" in arguments:
             payload["always_inject"] = arguments["always_inject"]
+        if arguments.get("when_conditions"):
+            payload["when_conditions"] = arguments["when_conditions"]
         ctx_type = arguments.get("type", "note")
 
         # Issues are first-class Items — route transparently to the item creation API
@@ -1216,8 +1380,30 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
         return [types.TextContent(type="text", text=text)]
 
-    if name == "vibecheck_update_context":
-        ctx_id = url_quote(arguments.get("id", ""), safe="")
+    if name == "vibecheck_patch":
+        raw_id = arguments.get("id", "")
+        # Route Items (ISS-X labels) to the items API
+        if raw_id.upper().startswith("ISS-"):
+            item_id = url_quote(raw_id, safe="")
+            patch: dict = {}
+            if arguments.get("title"):
+                patch["title"] = arguments["title"]
+            if arguments.get("brief_replace") is not None:
+                patch["brief"] = arguments["brief_replace"]
+            if arguments.get("status"):
+                patch["status"] = arguments["status"]
+            if patch:
+                item_result = _api_call("PATCH", f"/api/items/{item_id}", patch)
+                if item_result.get("error"):
+                    return [types.TextContent(type="text", text=f"Failed to update item: {item_result['error']}")]
+            else:
+                item_result = _api_call("GET", f"/api/items/{item_id}")
+            label = item_result.get("label", raw_id)
+            title = item_result.get("title", "")
+            status = item_result.get("status", "")
+            return [types.TextContent(type="text", text=f"Item updated: \"{title}\" ({label}) — status={status}")]
+
+        ctx_id = url_quote(raw_id, safe="")
 
         # Mutual exclusion check
         brief_fields = [
@@ -1244,6 +1430,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             patch["context_summary"] = arguments["context_summary"]
         if "source_snapshot" in arguments:
             patch["source_snapshot"] = arguments["source_snapshot"]
+        if "when_conditions" in arguments:
+            patch["when_conditions"] = arguments["when_conditions"]
 
         # Brief handling: file, replace, or append
         if arguments.get("brief_file"):
@@ -1447,7 +1635,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             lines.append(f"**Permalink:** {get_frontend_url()}/#context/{label}")
         lines += [
             "",
-            f"## Spec Brief\n{ctx.get('brief') or '(no brief — use vibecheck_update_context to add one)'}",
+            f"## Spec Brief\n{ctx.get('brief') or '(no brief — use vibecheck_update to add one)'}",
         ]
         decisions = (active.get("decisions") or [])
         if decisions:
@@ -1582,7 +1770,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             if suggestion.get("why_now"):
                 lines.append(f"Why now: {suggestion['why_now']}")
             if ctx_id:
-                lines.append(f'Load with: vibecheck_get_context("{ctx_id}")')
+                lines.append(f'Load with: vibecheck_get("{ctx_id}")')
             msg = "\n".join(lines)
 
     return [types.TextContent(type="text", text=msg)]
