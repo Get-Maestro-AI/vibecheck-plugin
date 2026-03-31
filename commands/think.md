@@ -1,5 +1,5 @@
 ---
-description: Start an interactive shaping conversation to develop a context (e.g. spec, decision)
+description: Start an interactive thinking conversation to develop a context (e.g. spec, decision)
 ---
 
 Shape a VibeCheck context through an interactive conversation.

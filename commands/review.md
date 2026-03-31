@@ -1,5 +1,5 @@
 ---
-description: Check your work at any phase — routes to specialized check skills based on context
+description: Review phase quality check — routes to review-phase skills (security, architecture, code, etc.) based on changed files
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -206,54 +206,21 @@ PY
 
 ## Phase 2 — Discover and load check skills
 
-Route to the right check methodology using **three signals**:
+Route to check skills using the **heuristic check types** from Phase 1 output. `vibe:check` routes only within the Check phase — it discovers check-type skills (security, architecture, code, design, etc.) based on the files changed.
 
-**Signal A** (above): The "Heuristic check types" line from file-pattern heuristics.
+> **Note:** `vibe:check` is scoped to quality checks only. For spec review use `vibe:shape`, for plan review use `vibe:plan`, for build guidance use `vibe:build`. Each phase has its own command.
 
-**Signal B**: The **pipeline phase** (lifecycle stage of the sprint board item) and **work phase** (what the agent is doing right now) from Phase 1.
-
-### Phase-aware routing
-
-Read the `Pipeline phase`, `Work phase`, and `Current task` lines from the Phase 1 output. **Pipeline phase is the primary routing signal** — it tells you what lifecycle stage this work is in, which determines what artifact to check. Work phase is secondary context within the pipeline stage.
-
-**Priority cascade:**
-1. If `Pipeline phase` is set → use it (strongest signal)
-2. Else if `Work phase` is set → use it as fallback
-3. Else → fall back to objective title / heuristics
-
-#### Pipeline phase routing (primary)
-
-| Pipeline phase | Discovery query pattern | Situation parameter |
-|---|---|---|
-| `shape` | `"check spec quality completeness clarity scope"` | `"Shape phase — <current_task>"` |
-| `plan` | `"check plan quality completeness feasibility"` | `"Plan phase — <current_task>"` |
-| `build` | `"check code correctness edge cases error handling"` | `"Build phase — <current_task>"` |
-| `review` | `"check code review pre-commit bugs standards"` | `"Review phase — <current_task>"` |
-| `done` | `"check code review pre-commit bugs standards"` | `"Done phase — final check"` |
-
-#### Work phase routing (fallback when no pipeline phase)
-
-| Work phase | Discovery query pattern | Situation parameter |
-|---|---|---|
-| `planning` | `"check plan quality completeness feasibility"` | `"Planning — <current_task>"` |
-| `implementing` | `"check code correctness edge cases error handling"` | `"Implementing — <current_task>"` |
-| `debugging` | `"check code correctness bug fix regression"` | `"Debugging — <current_task>"` |
-| `reviewing` | `"check code review pre-commit bugs standards"` | `"Reviewing — <current_task>"` |
-| `(none)` or other | `"check <objective_title or summary of changes>"` | _(omit or use heuristic context)_ |
-
-Call discovery:
+Read the "Heuristic check types" line from Phase 1. Use it to build the discovery query:
 
 ```
-vibecheck_discover(query="<from table above>", layer="skill", skill_type="check", situation="<from table above>", limit=4)
+vibecheck_discover(query="check <heuristic check types from Phase 1>", layer="skill", skill_type="check", situation="Check phase — reviewing <summary of changes>", limit=4)
 ```
 
 **For every skill returned, you MUST call `vibecheck_get_context(id)` to load the full brief.** Do not rely on the context_summary snippet from the discover result — it is not the methodology, it is a description of when to use the skill. Do not skip this step because you already know what "security check" or "code check" means. The brief defines the specific methodology to follow; your general knowledge does not substitute for it.
 
 **Merge logic:**
-- **In Build/Review phases:** `code-check` is always required when the diff contains any code files (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, etc.). Do not drop it because a more specific check type was discovered.
-- **In Shape phase:** spec-check skills take priority. Code-check is only relevant if code files were actually changed.
-- **In Plan phase:** plan-check skills take priority. Code-check only if implementation has started alongside planning.
-- Union Signal A and Signal B — do not pick one type, run **all** that apply.
+- `code-check` is always required when the diff contains any code files (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.go`, `.rs`, etc.). Do not drop it because a more specific check type was discovered.
+- Union all heuristic check types — do not pick one, run **all** that apply.
 - For each check type in the final set: if a skill brief was loaded for that type, follow its methodology. Otherwise use the Built-in Check Criteria.
 - Run each type in sequence; all findings across all passes go into the single payload.
 - If no skills are found at all, fall back to the Built-in Check Criteria for every type.

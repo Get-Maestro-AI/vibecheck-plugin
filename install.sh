@@ -212,7 +212,7 @@ OUR_HOOKS = {
     "SessionStart": [
         {
             "identity": "[VibeCheck] Session started",
-            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Run /vibe:check after drafting specs/plans and before committing.'",
+            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Run /vibe:review after drafting specs/plans and before committing.'",
             "options": {},
         },
         {
@@ -244,7 +244,7 @@ OUR_HOOKS = {
         },
         {
             "identity": "[VibeCheck] Call vibecheck_update",
-            "command": "echo '[VibeCheck] Call vibecheck_update after each file edit or completed subtask. Run /vibe:check after drafting specs/plans and before committing.'",
+            "command": "echo '[VibeCheck] Call vibecheck_update after each file edit or completed subtask. Run /vibe:review after drafting specs/plans and before committing.'",
             "options": {},
         },
         {
@@ -471,10 +471,10 @@ Reporting checkpoints are mandatory at each of these moments:
 - After each file edit or completed subtask: call vibecheck_update with what changed.
 - On every phase change (planning → implementing → debugging → reviewing): call vibecheck_update.
 - Before your final response in the conversation: call vibecheck_update with status "done".
-- After drafting a spec: run /vibe:check to check quality before continuing.
-- After drafting a plan: run /vibe:check to check quality before continuing.
-- After completing each implementation task: run /vibe:check to catch issues before committing.
-- After /vibe:check on a Build phase (i.e. a big chunk of implementation work): run /vibe:improve to refine skills based on session friction.
+- After drafting a spec: run /vibe:review to check quality before continuing.
+- After drafting a plan: run /vibe:review to check quality before continuing.
+- After completing each implementation task: run /vibe:review to catch issues before committing.
+- After /vibe:review on a Build phase (i.e. a big chunk of implementation work): run /vibe:reflect to refine skills based on session friction.
 - After fixing any review-flagged issue: call vibecheck_resolve to mark it fixed on the dashboard.
 - When a spec or plan has been fully implemented: update its status to "done" via vibecheck_update_context.
 Minimum cadence: if 5 minutes of active work pass without a checkpoint, you are behind. Report now.
@@ -502,7 +502,7 @@ if [[ -d "$OLD_COMMANDS_DIR" ]]; then
 fi
 
 # Remove legacy symlinks from old command names.
-for legacy in checkpoint dismiss-issue find-related create-context create-issue complete review; do
+for legacy in checkpoint dismiss-issue find-related create-context create-issue complete review shape check; do
   if [[ -L "$COMMANDS_DEST/$legacy.md" ]]; then
     rm -f "$COMMANDS_DEST/$legacy.md"
     warn "Removed legacy command: $legacy"
@@ -537,11 +537,11 @@ echo ""
 echo "  Restart Claude Code (or open a new session) for hooks to take effect."
 echo ""
 echo "  Core workflow:"
-echo "    /vibe:check          — check your work at any phase before committing"
+echo "    /vibe:review         — review your work before committing"
 echo "    /vibe:fix <ID>      — investigate and fix a flagged issue"
 echo "    /vibe:implement     — begin a spec with full context loaded"
-echo "    /vibe:improve       — refine skills based on session friction"
-echo "    /vibe:shape         — develop a context interactively"
+echo "    /vibe:reflect       — refine skills based on session friction"
+echo "    /vibe:think         — develop a context interactively"
 echo ""
 echo "  Context Library:"
 echo "    /vibe:create        — capture a note, issue, spec, or decision"

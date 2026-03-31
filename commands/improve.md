@@ -1,51 +1,23 @@
 ---
-description: Run the VibeCheck improvement pass — refines skills based on session friction
+description: (Redirects to vibe:reflect) Run the reflect pass — refines skills based on session friction
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
-You will run the VibeCheck improve pass, which refines skill methodology based on friction signals from the current session.
+> **`vibe:improve` has been renamed to `vibe:reflect`.** This command redirects to the Reflect phase.
 
-**Your job is NOT convention capture — SPEC-322 handles that in-turn. Your job is: find skills whose methodology or trigger conditions need refinement based on how they performed this session.**
-
----
-
-## Phase 1 — Discover and load improve specialists
+You will run the reflect phase. Discover and load reflect specialists:
 
 ```
-vibecheck_discover(query="improve skill methodology", layer="skill", skill_type="improve", limit=4)
+vibecheck_discover(query="reflect retrospective skill refinement session learnings", layer="skill", skill_type="reflect", limit=4)
 ```
 
 For each matched skill, call `vibecheck_get_context(id)` to load the full brief. The brief defines the methodology — follow it exactly.
 
 **Important:** This is a manual invocation. Tell each specialist to **skip the session dedup check** — explicit user intent always runs.
 
-If no skills are found, fall back to the built-in improve criteria below.
+If no skills are found, fall back to the built-in criteria:
 
----
-
-## Phase 2 — Run improve specialists
-
-For each loaded improve specialist, follow its methodology in full. The specialist scans for friction signals and refines skills as needed.
-
-### Built-in Improve Criteria (fallback when no skill is loaded)
-
-Scan the session conversation for:
-- Skills that triggered but were overridden or ignored by the user
-- Skills whose methodology caused explicit pushback ("too rigid", "skip this", "you already know this")
-- Skills whose trigger conditions didn't match the context they fired in
-- Skills that should have triggered but didn't
-
-For each skill with clear friction:
-- Load its full brief with `vibecheck_get_context`
-- Update `context_summary` if the trigger was wrong
-- Update `brief`: write the revised brief to `~/.vibecheck/{board_slug}/docs/{LABEL}.md`, then call `vibecheck_update_context(id="<LABEL>", brief_file="~/.vibecheck/{board_slug}/docs/{LABEL}.md")`. Fallback: use `brief_replace=...` inline if board_slug is unknown.
-- Set `agent_updated_at` to current UTC ISO timestamp
-
-**Do NOT:**
-- Capture codebase conventions (SPEC-322 handles this in-turn)
-- Manufacture improvements when no friction was observed
-- Rewrite skills speculatively
-
----
-
-Then respond to the user normally.
+1. **Skill friction?** Did any skill fire incorrectly, miss the context, or produce unhelpful guidance? If so, refine it.
+2. **What was decided?** Capture architectural decisions as decision contexts.
+3. **What was discovered?** File issues for discovered problems.
+4. **Do NOT** capture codebase conventions — that is a separate concern.

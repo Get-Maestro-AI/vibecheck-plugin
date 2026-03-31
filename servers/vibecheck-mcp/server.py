@@ -759,7 +759,7 @@ async def list_tools() -> list[types.Tool]:
                     },
                     "skill_type": {
                         "type": "string",
-                        "description": "Filter skills by sub-type (e.g. 'check', 'shape', 'plan'). Only meaningful when layer='skill'.",
+                        "description": "Filter skills by sub-type (e.g. 'think', 'plan', 'build', 'review', 'test', 'ship', 'reflect', 'debug'). Only meaningful when layer='skill'.",
                     },
                     "limit": {
                         "type": "integer",
@@ -908,9 +908,9 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         if result.get("ok"):
             return [types.TextContent(type="text", text=(
                 f"Objective finalized: {result.get('objective_id', '')}.\n\n"
-                "**VibeCheck improve pass:** Before responding to the user, run the improve pass — "
-                "call vibecheck_discover(query=\"improve skill methodology\", layer=\"skill\", skill_type=\"improve\") "
-                "to find the right improve specialist(s), load each matched skill's full brief with "
+                "**VibeCheck reflect pass:** Before responding to the user, run the reflect pass — "
+                "call vibecheck_discover(query=\"reflect skill methodology\", layer=\"skill\", skill_type=\"reflect\") "
+                "to find the right reflect specialist(s), load each matched skill's full brief with "
                 "vibecheck_get_context(id), then follow its methodology. "
                 "This is how VibeCheck gets smarter each session."
             ))]
