@@ -12,7 +12,7 @@ Shape a VibeCheck context through an interactive conversation.
 
 ### 0.1 — Specialty override
 Does the input explicitly name a specialty ("design", "product", "strategy", "CEO")?
-If yes, skip Steps 0.3–0.4 and mode routing — route directly to that specialty in Step 3 and proceed.
+If yes, skip Steps 0.3–0.4 — route directly to that specialty in Step 3 and proceed.
 
 ### 0.2 — Reachability check
 Call GET /api/status. If it fails, wait 2 seconds and retry once.
@@ -47,7 +47,7 @@ Classify `$ARGUMENTS`:
 
 ## Path A — No argument
 
-Ask the user one question: "What do you want to shape?" Wait for their answer, then create a spec context using the Path B `vibecheck_create_context` call (using their answer as the title seed). Extract the context ID. Then proceed to Step 2 (mode routing).
+Ask the user one question: "What do you want to shape?" Wait for their answer, then create a spec context using the Path B `vibecheck_create_context` call (using their answer as the title seed). Extract the context ID. Then proceed to Step 3.
 
 **The anchor must exist before the first question.**
 
@@ -89,29 +89,13 @@ Proceed to Step 2.
 
 ---
 
-## Step 2 — Mode routing (run after context is anchored)
+## Step 2 — Load specialty
 
-Ask ONE mode routing question before loading any specialty:
-
-> "Are you exploring an early idea, refining something existing, or scoping an issue into a spec?"
-
-Route:
-- **Exploring** → Phase 2B (Builder Mode) — generative, not adversarial
-- **New concept with some definition** → Phase 2A (Forcing questions)
-- **Refining existing** → skip to Phase 3 (Premise challenge first), then gap questions
-- **Scoping an issue** → constraint mode: ask minimum shippable + explicit exclusions first, then Phase 3
-
-**Escape hatch:** If the user says "just do it" or equivalent at any point, ask the 2 most critical unanswered questions, then proceed to Phase 4. On second pushback, proceed to Phase 4 immediately.
-
----
-
-## Step 3 — Load specialty
-
-Route to the right specialty based on the topic:
+Infer the right specialty from Phase 0 research signals — do not ask:
 - Design / UI / visual / brand / layout → `design-consultation`
 - Is-this-right / scope / strategy / should-we-build → `ceo-specialist`
 - User / problem / pain / persona / who-is-this-for → `product-specialist`
-- Ambiguous → ask ONE clarifying question: "Is this mainly design direction, strategy/scope, or the user problem?"
+- Ambiguous after Phase 0 → infer based on the strongest signal; state the inference: *"I'm treating this as a product question — correct me if wrong."*
 
 Discover and load:
 
@@ -120,62 +104,45 @@ vibecheck_discover(query="<routing signal>", skill_type="shape", limit=4)
 vibecheck_get_context(id=<matched skill id>)
 ```
 
-**Load the specialty for domain expertise and final brief format.** The conversation phases below (2A/2B/3/4/5) replace the specialty's generic question flow. The specialty's domain knowledge and brief template still apply.
+**Load the specialty for domain expertise and final brief format.** Phase 2 below replaces the specialty's generic question flow. The specialty's domain knowledge and brief template still apply.
 
-**After loading:** execute the phase selected in Step 2 — Phase 2A, 2B, or 3 depending on the routing answer.
-
----
-
-## Phase 2A — Forcing questions (New concept mode)
-
-Adversarial questions, one at a time. Do not move on until the answer is specific. Name bad answers explicitly — do not politely accept vague responses.
-
-**Ask only the relevant subset based on stage:**
-
-| Stage | Ask |
-|---|---|
-| Pre-idea / early concept | Q1, Q2, Q3 |
-| Has a defined problem | Q2, Q3, Q4 |
-| Has prior attempts or existing work | Q3, Q4 |
-
-**Q1 — Evidence of demand**
-*"What's the strongest evidence someone would be upset if this didn't exist? Not 'interested' — actually upset."*
-Red flag: "people say it's cool," waitlists, general enthusiasm, "developers want this."
-
-**Q2 — Specific human**
-*"Name the actual human most affected. Job title, what did they just try to do, what went wrong?"*
-Red flag: categories ("developers," "users," "teams"). Push until a specific person in a specific situation is named.
-
-**Q3 — Status quo**
-*"What are they doing today instead, and what's broken about it?"*
-Red flag: "nothing — there's no solution." There is always a status quo.
-
-**Q4 — Minimum pull**
-*"What's the smallest thing you could ship that would make the person from Q2 say 'I need this'?"*
-Push back on over-scoped answers: "That's a full product. What's the one thing?"
+**After loading:** execute Phase 2 (Proposal-Reaction Loop).
 
 ---
 
-## Phase 2B — Builder Mode (Early exploration)
+## Phase 2 — Proposal-Reaction Loop
 
-Generative questions, not interrogative. For ideas that are genuinely early — forcing questions would kill momentum before the idea is worth killing.
+The specialist never opens with a question. Open with a proposal package — no preamble:
 
-Ask one at a time:
-1. "What's the most interesting version of this — not the safest, the most interesting?"
-2. "Who would you show this to first? What would make them say 'whoa'?"
-3. "What's the fastest path to something you could actually use or share?"
-4. "What existing thing is closest to this, and how is yours different?"
+```
+**[POV — primary framing]**
+What this is really about: [the most interesting framing of the problem given Phase 0 findings]
+Implication: [what follows from this framing — what it changes about the approach]
 
-After 2–3 exchanges, offer the transition:
-*"You've got enough shape here to pressure-test it. Want to?"*
-- If yes → switch to Phase 2A forcing questions.
-- If no answer after the next exchange → offer once more, then proceed to Phase 3 regardless.
+**[Interesting version]**
+What if: [a more ambitious or unexpected take on the same problem]
+Implication: [what it would unlock that the primary framing doesn't]
+
+**[Contrarian take]**
+The assumption worth questioning: [what everyone assumes but Phase 0 suggests might be wrong]
+Implication: [what changes if the assumption is false]
+```
+
+End with ONE open question: *"Which of these resonates, or what did I miss?"*
+
+**User reacts** → specialist deepens on what resonated, one exchange at a time. Ask questions only when something is genuinely unknown — not as setup.
+
+**If the proposal misses:** ask what specifically was wrong and iterate. Do not fall back to Q1–Q4.
+
+**If Phase 0 found nothing useful:** state it — *"I didn't find enough context to form a strong POV — here's what I have: [findings]. What's the one thing I should know?"* Then proceed once answered.
 
 ---
 
-## Phase 3 — Premise challenge
+## Phase 3 — Premise challenge (conditional)
 
-Before producing alternatives, surface 2–3 falsifiable premises derived from the conversation:
+Trigger this only when the chosen direction has a load-bearing assumption that, if wrong, would force a mid-build pivot — e.g., *"this assumes users have X permission"* or *"this assumes the API supports Y."* Skip if no such assumption exists.
+
+When triggered, surface 2–3 falsifiable premises:
 
 ```
 PREMISES — agree or disagree:
@@ -184,42 +151,13 @@ PREMISES — agree or disagree:
 3. [statement]
 ```
 
-Require explicit agree/disagree per premise. If the user disagrees with a premise, revise and re-present. Do not proceed to Phase 4 until all premises are confirmed.
+Require explicit agree/disagree per premise. If the user disagrees, revise and re-present before proceeding.
 
 Each premise must be falsifiable — if you cannot imagine evidence that would disprove it, rewrite it.
 
 ---
 
-## Phase 4 — Mandatory alternatives
-
-Always produce 2–3 scoped approaches. Never present a single direction.
-
-```
-APPROACH A: [Name] — Minimal Viable
-  What it is: [1-2 sentences]
-  Effort: [S / M / L]
-  Completeness: X/10
-  Included: [list]
-  Excluded: [list — mandatory]
-
-APPROACH B: [Name] — Ideal Architecture
-  What it is: ...
-  Effort: ...
-  Completeness: X/10
-  Included: ...
-  Excluded: ...
-
-APPROACH C: [Name] — Creative / Lateral  (optional, when genuinely useful)
-  ...
-```
-
-**Completeness calibration:** 10 = all edge cases handled, 7 = happy path only, 3 = proves the concept exists.
-
-One must be minimal viable, one must be ideal, one may be creative/lateral. User chooses an approach. The brief is written for the chosen approach only.
-
----
-
-## Phase 5 — Adversarial self-review (run before presenting the brief)
+## Phase A — Adversarial self-review (run before presenting the brief)
 
 Before showing the brief, run a silent internal quality check. Do not narrate this to the user — fix issues and present the final result.
 
@@ -238,10 +176,9 @@ If any dimension is weak: revise the relevant section. Up to 2 revision passes. 
 
 When the conversation is complete, apply the shaped brief to the context.
 
-**Enriched brief format** — the final brief must include:
-- Confirmed premises (as "Foundations" section)
-- Chosen approach's completeness score
-- "Why not the alternatives" (1 line per rejected approach)
+**Brief format** — the final brief must include:
+- Confirmed premises (as "Foundations" section, if Phase 3 ran)
+- "Why this direction" — 1-2 sentences on what in the proposal-reaction exchange confirmed the chosen framing
 
 **Write to a file first to keep the MCP call compact:**
 
@@ -274,7 +211,7 @@ When the API is unreachable:
 
 1. Tell the user: "VibeCheck isn't reachable — shaping in-memory. I'll offer to persist when available."
 2. Skip Steps 0.3–0.4 (no context library search). Proceed with workspace review only.
-3. Run the full conversation (Phases 2–5) in-memory.
+3. Run the full conversation (Phases 2, 3, and A) in-memory.
 4. At the end, present the shaped brief as markdown.
 5. Offer: "VibeCheck is still unreachable. Here's the brief — paste it into the context manually, or retry when the server is back."
 
@@ -284,11 +221,10 @@ Shape always works. The server is for the brief, not the conversation.
 
 ## Conversation quality rules
 
-- Research before asking — never open cold; Step 0 findings anchor the conversation
+- **Proposals over questions** — if Phase 0 gives you enough to form a POV, lead with it. Questions are for when something is genuinely unknown, not for setup.
+- Research before opening — Step 0 findings are what make the proposal non-generic; never skip them
 - Ask one question at a time — the most important one, not a list
-- Name bad answers — vague answers get named as vague, not accepted and moved past
+- If the proposal misses, ask what was wrong — do not fall back to Q1–Q4
 - State recommendations directly — no menus of equal options
-- Challenge vague language — "improve" and "better UX" are not specs; ask what specifically is broken
 - Do not recap what the user just said — move forward
-- The escape hatch is real — if the user pushes back twice, respect it immediately
 - Brief depth: match complexity. MCP has no meaningful size limit. Write complete methodology.
