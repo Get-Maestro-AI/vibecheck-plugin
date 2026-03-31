@@ -1285,11 +1285,11 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             except Exception:
                 pass
 
-        updated_label = result.get("label")
-        url_suffix = f"\nView: {get_frontend_url()}/#context/{updated_label}" if updated_label else ""
+        updated_label = result.get("label") or result.get("id") or ctx_id
+        url = f"{get_frontend_url()}/#context/{updated_label}"
         return [types.TextContent(
             type="text",
-            text=f"Context updated: \"{result['title']}\" — status={result['status']}{url_suffix}",
+            text=f"Context updated: \"{result['title']}\" ({updated_label}) — status={result['status']}\nView: {url}",
         )]
 
     if name == "vibecheck_link_context":
