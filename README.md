@@ -41,10 +41,10 @@ claude mcp remove vibecheck --scope user
 
 | Command | Description |
 |---|---|
-| `/vibe:check` | Review changes for bugs before committing |
+| `/vibe:review` | Review changes for bugs before committing |
 | `/vibe:fix <ID>` | Investigate and fix a flagged issue |
-| `/vibe:implement <ID>` | Begin implementing a spec with full context |
-| `/vibe:shape <ID>` | Develop a context interactively |
+| `/vibe:build <ID>` | Begin implementing a spec with full context |
+| `/vibe:think <ID>` | Develop a context interactively |
 | `/vibe:create` | Capture a note, issue, spec, or decision |
 | `/vibe:search` | Find semantically related contexts |
 | `/vibe:contexts` | Browse all contexts |

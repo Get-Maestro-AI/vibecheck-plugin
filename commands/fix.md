@@ -10,7 +10,7 @@ Investigate VibeCheck issue **$ARGUMENTS** and produce a concrete fix plan.
 Load the context via MCP:
 
 ```
-vibecheck_get_context(id="$ARGUMENTS")
+vibecheck_get(id="$ARGUMENTS")
 ```
 
 ## Fallback: active alerts for this project
@@ -56,4 +56,4 @@ Write a numbered, step-by-step plan. For each step:
 
 Once the fix is implemented, call `vibecheck_resolve` with the issue ID to clear it from the dashboard.
 
-> **Note:** If the ID you looked up turns out to be a spec rather than an issue, use `/vibe:implement` instead — it loads the full context set and sets the right status transitions.
+> **Note:** If the ID you looked up turns out to be a spec rather than an issue, use `/vibe:build` instead — it loads the full context set and sets the right status transitions.

@@ -9,7 +9,7 @@ List contexts from the VibeCheck Context Library.
 
 ## Instructions
 
-Call the `vibecheck_list_contexts` MCP tool to fetch contexts. Parse the arguments above to determine filters:
+Call the `vibecheck_list` MCP tool to fetch contexts. Parse the arguments above to determine filters:
 
 - If arguments contain a type keyword (`research`, `spec`, `issue`, `decision`, `note`, `standard`), pass it as the `type` filter
 - If arguments contain a status keyword (`draft`, `shaped`, `ready`, `dispatched`, `implemented`, `active`, `archived`, `open`), pass it as the `status` filter

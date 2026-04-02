@@ -9,10 +9,10 @@ Show the full detail for a VibeCheck context.
 
 ## Instructions
 
-Call the `vibecheck_get_context` MCP tool with the identifier provided above.
+Call the `vibecheck_get` MCP tool with the identifier provided above.
 
-- If the argument looks like a label (e.g. `ISS-12`, `DEC-3`, `SPEC-1`), first call `vibecheck_list_contexts` to find the matching context ID, then call `vibecheck_get_context` with that ID.
-- If the argument looks like a UUID, call `vibecheck_get_context` directly.
+- If the argument looks like a label (e.g. `ISS-12`, `DEC-3`, `SPEC-1`), first call `vibecheck_list` to find the matching context ID, then call `vibecheck_get` with that ID.
+- If the argument looks like a UUID, call `vibecheck_get` directly.
 
 Present the context in a readable format:
 

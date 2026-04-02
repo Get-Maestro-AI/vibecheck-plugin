@@ -47,7 +47,7 @@ Classify `$ARGUMENTS`:
 
 ## Path A — No argument
 
-Ask the user one question: "What do you want to shape?" Wait for their answer, then create a spec context using the Path B `vibecheck_create_context` call (using their answer as the title seed). Extract the context ID. Then proceed to Step 3.
+Ask the user one question: "What do you want to shape?" Wait for their answer, then create a spec context using the Path B `vibecheck_create` call (using their answer as the title seed). Extract the context ID. Then proceed to Step 3.
 
 **The anchor must exist before the first question.**
 
@@ -58,7 +58,7 @@ Ask the user one question: "What do you want to shape?" Wait for their answer, t
 Create a spec context to anchor the conversation:
 
 ```
-vibecheck_create_context(
+vibecheck_create(
   title="Spec: <seed topic>",
   type="spec",
   context_summary="Shaping: <seed topic>"
@@ -74,16 +74,16 @@ Extract the new context `id`. Proceed to Step 2.
 Resolve the context:
 
 ```
-vibecheck_get_context(id="$ARGUMENTS")
+vibecheck_get(id="$ARGUMENTS")
 ```
 
 Read the context type and existing brief.
 
 **If the resolved context has `type=issue`:**
 1. Tell the user: "This is an issue — shaping it will produce a new spec. The issue will be linked as a predecessor."
-2. Create a new spec: `vibecheck_create_context(title="Spec: <issue title>", type="spec", predecessor_id="<issue_id>")`
+2. Create a new spec: `vibecheck_create(title="Spec: <issue title>", type="spec", predecessor_id="<issue_id>")`
 3. Extract the new spec's id. Proceed shaping the spec (not the issue).
-4. At the end (Step 4), update the issue: `vibecheck_update_context(id="<issue_id>", status="dispatched")`
+4. At the end (Step 4), update the issue: `vibecheck_patch(id="<issue_id>", status="dispatched")`
 
 Proceed to Step 2.
 
@@ -101,7 +101,7 @@ Discover and load:
 
 ```
 vibecheck_discover(query="<routing signal>", skill_type="shape", limit=4)
-vibecheck_get_context(id=<matched skill id>)
+vibecheck_get(id=<matched skill id>)
 ```
 
 **Load the specialty for domain expertise and final brief format.** Phase 2 below replaces the specialty's generic question flow. The specialty's domain knowledge and brief template still apply.
@@ -187,7 +187,7 @@ When the conversation is complete, apply the shaped brief to the context.
 3. Call:
 
 ```
-vibecheck_update_context(id="<context_id>", brief_file="~/.vibecheck/{board_slug}/docs/{LABEL}.md")
+vibecheck_patch(id="<context_id>", brief_file="~/.vibecheck/{board_slug}/docs/{LABEL}.md")
 ```
 
 **Fallback:** If board name is unknown, use `brief_replace` inline.
@@ -199,7 +199,7 @@ vibecheck_update_context(id="<context_id>", brief_file="~/.vibecheck/{board_slug
 1. Show the final shaped brief
 2. Report the context label (e.g. SPEC-42) and status
 3. Suggest next steps:
-   - If spec: "Ready for `/vibe:plan` to structure your approach, or `/vibe:implement <label>` to go straight to implementation"
+   - If spec: "Ready for `/vibe:plan` to structure your approach, or `/vibe:build <label>` to go straight to implementation"
    - If design: "DESIGN.md written — ready for implementation"
    - If strategy: "Go/no-go decision captured — proceed to `/vibe:plan` if go"
 

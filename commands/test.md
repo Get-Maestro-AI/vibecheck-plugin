@@ -24,7 +24,7 @@ Understand what changed:
 vibecheck_discover(query="test strategy coverage edge cases", layer="skill", skill_type="test", situation="Test phase — planning test coverage for recent changes", limit=4)
 ```
 
-For each matched skill, call `vibecheck_get_context(id)` to load the full brief. The brief defines the methodology — follow it exactly.
+For each matched skill, call `vibecheck_get(id)` to load the full brief. The brief defines the methodology — follow it exactly.
 
 If no skills are found, use the built-in test guidance below.
 

@@ -28,7 +28,7 @@ Call `vibecheck_create` with the parsed fields:
 After creation, report:
 - The assigned label and UUID
 - The type and title
-- Next steps: `/vibe:context <label>` to view, `/vibe:shape <label>` to develop further, `/vibe:implement <label>` if it's a spec
+- Next steps: `/vibe:context <label>` to view, `/vibe:think <label>` to develop further, `/vibe:build <label>` if it's a spec
 
 **Examples:**
 - `/vibe:create Add caching layer for embeddings`

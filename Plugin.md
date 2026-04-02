@@ -39,10 +39,10 @@ Then remove hooks from `~/.claude/settings.json` and delete `~/.claude/plugins/v
 
 | Command | Description |
 |---|---|
-| `/vibe:check` | Check your work at any phase before committing |
+| `/vibe:review` | Check your work at any phase before committing |
 | `/vibe:fix <ID>` | Investigate and fix a flagged issue |
-| `/vibe:implement <ID>` | Begin implementing a spec with full context |
-| `/vibe:shape <ID>` | Develop a context interactively |
+| `/vibe:build <ID>` | Begin implementing a spec with full context |
+| `/vibe:think <ID>` | Develop a context interactively |
 | `/vibe:create` | Capture a note, issue, spec, or decision |
 | `/vibe:search` | Find semantically related contexts |
 | `/vibe:contexts` | Browse all contexts |

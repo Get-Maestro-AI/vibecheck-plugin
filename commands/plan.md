@@ -150,7 +150,7 @@ PY
 If Phase 1 output shows "Has spec: yes" with a label (e.g., `SPEC-482`), **load it directly** — do not search:
 
 ```
-vibecheck_get_context(id="<label>")
+vibecheck_get(id="<label>")
 ```
 
 This gives you the full spec brief to inform the plan. A direct label lookup is always preferred over `vibecheck_discover` when you have the label.
@@ -173,10 +173,10 @@ Before proceeding, classify this task as **BOUNDED** or **OPEN** using the outpu
 - Multi-session scope where misaligned expectations would be costly to undo
 
 **If OPEN and no active spec exists:**
-Tell the user: *"This task looks open-ended — a spec would lock down the 'what' before we plan the 'how.' Want to run `/vibe:shape` to capture requirements first, or plan directly?"*
+Tell the user: *"This task looks open-ended — a spec would lock down the 'what' before we plan the 'how.' Want to run `/vibe:think` to capture requirements first, or plan directly?"*
 
 Wait for their answer before continuing:
-- **Shape first:** run `/vibe:shape` with the task description, then return here once the spec exists
+- **Think first:** run `/vibe:think` with the task description, then return here once the spec exists
 - **Plan directly:** proceed to Phase 2
 
 **Skip this check if** a saved plan already exists (resume path), an active spec already exists (scope already defined), or `$ARGUMENTS` contained a plan-type override.
@@ -195,7 +195,7 @@ vibecheck_discover(query="<plan-type>", layer="skill", skill_type="plan", limit=
 
 Examples of good queries: `"feature plan"`, `"debug plan"`, `"design plan"`. Use natural words, not hyphenated slugs — `"feature plan"` matches better than `"feature-plan"`. Do NOT include the objective title or task description in the query — domain-specific terms dilute relevance and cause mismatches.
 
-**For each skill you decide to use, call `vibecheck_get_context(id)` to load its full brief.** The brief defines the specialist methodology — follow it exactly. Do not substitute your general knowledge for the skill's specific approach.
+**For each skill you decide to use, call `vibecheck_get(id)` to load its full brief.** The brief defines the specialist methodology — follow it exactly. Do not substitute your general knowledge for the skill's specific approach.
 
 **How many specialists to select:**
 
@@ -248,7 +248,7 @@ Recommended planning direction — where to start, what to sequence first.
 - [relevant files from Phase 1]
 ```
 
-**If a saved plan was found** and the user wants to resume: load it with `vibecheck_get_context`, summarise the remaining steps, and call `EnterPlanMode` with the remaining steps as content.
+**If a saved plan was found** and the user wants to resume: load it with `vibecheck_get`, summarise the remaining steps, and call `EnterPlanMode` with the remaining steps as content.
 
 ### Entering plan mode
 
@@ -268,7 +268,7 @@ When the user approves the plan, **before calling ExitPlanMode**:
    b. Call the MCP tool with the file path:
 
 ```
-vibecheck_create_context(
+vibecheck_create(
     type="plan",
     title="<title from the plan's first ## heading>",
     context_summary="<one sentence: what this plan is for>",

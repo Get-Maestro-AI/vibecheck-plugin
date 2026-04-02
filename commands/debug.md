@@ -24,7 +24,7 @@ Understand what is broken:
 vibecheck_discover(query="debug root cause diagnostic methodology", layer="skill", skill_type="debug", situation="Debug phase — investigating failure", limit=4)
 ```
 
-For each matched skill, call `vibecheck_get_context(id)` to load the full brief. The brief defines the methodology — follow it exactly.
+For each matched skill, call `vibecheck_get(id)` to load the full brief. The brief defines the methodology — follow it exactly.
 
 If no skills are found, use the built-in debug guidance below.
 

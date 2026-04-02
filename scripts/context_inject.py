@@ -227,7 +227,7 @@ def _format_brief(contexts: list[dict]) -> str:
         lines.append("")
 
     if skill_labels:
-        calls = " and ".join(f'vibecheck_get_context("{lbl}")' for lbl in skill_labels)
+        calls = " and ".join(f'vibecheck_get("{lbl}")' for lbl in skill_labels)
         lines.append(
             f"  Non-negotiable if relevant: for any [skill] above that applies to your\n"
             f"  current task, load its full brief first and follow its methodology before\n"
@@ -237,7 +237,7 @@ def _format_brief(contexts: list[dict]) -> str:
     else:
         lines.append(
             "  Load any context in full with: "
-            'vibecheck_get_context("<label or id>")'
+            'vibecheck_get("<label or id>")'
         )
     return "\n".join(lines)
 
@@ -346,7 +346,7 @@ def _check_workflow_nudge(
     if not active_spec_id and not saved_plan:
         message = (
             "[VibeCheck] No spec or plan found for this session.\n"
-            "  Run /vibe:shape to define what you're building before diving in."
+            "  Run /vibe:think to define what you're building before diving in."
         )
 
     # Case 2: Spec exists but no plan — suggest plan
@@ -364,7 +364,7 @@ def _check_workflow_nudge(
             if age_min >= 10:
                 message = (
                     "[VibeCheck] You have an active spec and plan.\n"
-                    "  Run /vibe:check before committing to catch issues early."
+                    "  Run /vibe:review before committing to catch issues early."
                 )
         except Exception:
             pass
@@ -537,7 +537,7 @@ def main() -> None:
             correction_nudge = (
                 "[VibeCheck] Correction signal detected. If this states a codebase convention,\n"
                 "capture it before responding:\n"
-                "  vibecheck_create_context(type=\"standard\", always_inject=True,\n"
+                "  vibecheck_create(type=\"standard\", always_inject=True,\n"
                 "    title=\"<convention in ~5 words>\",\n"
                 "    brief=\"<when and how to apply it>\",\n"
                 "    context_summary=\"<one sentence: when this rule applies>\")\n"
@@ -596,7 +596,7 @@ def main() -> None:
     if contexts or plan_suggestion or workflow_nudge or correction_nudge:
         print(
             "\n[VibeCheck] File-written artifacts (specs, plans, design docs) are "
-            "automatically captured. Only use vibecheck_create_context for decisions, "
+            "automatically captured. Only use vibecheck_create for decisions, "
             "findings, and insights from conversation — never for content just written to a file."
         )
 

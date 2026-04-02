@@ -27,9 +27,9 @@ It connects to your configured VibeCheck server (default: `http://localhost:8420
 
 | Command | What it does |
 |---|---|
-| `/vibe:check` | Check your work at any phase — routes to specialized check skills based on context |
+| `/vibe:review` | Check your work at any phase — routes to specialized check skills based on context |
 | `/vibe:fix <ID>` | Investigate and fix a flagged issue |
-| `/vibe:implement <ID>` | Begin implementing a spec — loads full context before you write a line |
+| `/vibe:build <ID>` | Begin implementing a spec — loads full context before you write a line |
 | `/vibe:improve` | Run the improve pass manually — refines skills based on session friction |
 | `/vibe:resolve <ID>` | Close a specific issue or spec mid-session |
 ---
@@ -42,11 +42,11 @@ The Context Library stores specs, decisions, issues, and notes that persist acro
 |---|---|
 | `/vibe:create <title>` | Capture a new note, issue, spec, or decision |
 | `/vibe:search <query>` | Find semantically related contexts before making a decision |
-| `/vibe:shape <ID>` | Develop a context interactively — great for specs that aren't ready yet |
+| `/vibe:think <ID>` | Develop a context interactively — great for specs that aren't ready yet |
 | `/vibe:contexts [filters]` | Browse everything in the library |
 | `/vibe:context <ID>` | View full detail for a specific context |
 
-> **`shape`** is where the magic is. Not sure what to build or how to frame a problem? `/vibe:shape` walks you through it before you write a line of code.
+> **`think`** is where the magic is. Not sure what to build or how to frame a problem? `/vibe:think` walks you through it before you write a line of code.
 
 **Create syntax:**
 - `/vibe:create Add rate limiting` — creates a note
@@ -59,15 +59,15 @@ The Context Library stores specs, decisions, issues, and notes that persist acro
 **Typical workflow**
 
 1. Work normally — VibeCheck tracks progress automatically.
-2. Before committing, run `/vibe:check` to catch issues in staged changes.
+2. Before committing, run `/vibe:review` to catch issues in staged changes.
 3. Fix flagged issues with `/vibe:fix <ID>`, then `/vibe:resolve <ID>` to close each one.
 4. When done, commit your changes.
 
 **Spec workflow**
 
 1. Capture the idea: `/vibe:create spec: What you want to build`
-2. Develop it: `/vibe:shape <ID>`
-3. Build it: `/vibe:implement <ID>`
+2. Develop it: `/vibe:think <ID>`
+3. Build it: `/vibe:build <ID>`
 4. Close it: `/vibe:resolve <ID>`
 
 ---
@@ -77,16 +77,16 @@ The Context Library stores specs, decisions, issues, and notes that persist acro
 | Tool | What it does |
 |---|---|
 | `vibecheck_update` | Post a progress checkpoint to the dashboard |
-| `vibecheck_create_context` | Create a context (issue, spec, decision, note) |
-| `vibecheck_update_context` | Update an existing context's brief or status |
-| `vibecheck_get_context` | Load full detail for a context by ID |
-| `vibecheck_list_contexts` | Browse contexts with optional filters |
+| `vibecheck_create` | Create a context (issue, spec, decision, note) |
+| `vibecheck_patch` | Update an existing context or Item's brief, status, or title |
+| `vibecheck_get` | Load full detail for a context by ID |
+| `vibecheck_list` | Browse contexts with optional filters |
 | `vibecheck_discover` | Find relevant contexts by semantic query |
 | `vibecheck_find_related` | Find contexts related to a given context ID |
 | `vibecheck_link_context` | Link a context to the current session/objective |
 | `vibecheck_get_active_context_set` | Load full active context set for a context |
 | `vibecheck_resolve` | Mark a context resolved |
-| `vibecheck_push_review` | Submit structured review findings (used by `/vibe:check`) |
+| `vibecheck_push_review` | Submit structured review findings (used by `/vibe:review`) |
 | `vibecheck_begin_completion` | Start the objective completion protocol |
 | `vibecheck_finalize_objective` | Finalize and close the current objective |
 | `vibecheck_implement` | Begin implementing a spec from the library |

@@ -24,7 +24,7 @@ Check the current state of the working tree:
 vibecheck_discover(query="ship commit push PR release workflow", layer="skill", skill_type="ship", situation="Ship phase — preparing to commit and push", limit=4)
 ```
 
-For each matched skill, call `vibecheck_get_context(id)` to load the full brief. The brief defines the methodology — follow it exactly.
+For each matched skill, call `vibecheck_get(id)` to load the full brief. The brief defines the methodology — follow it exactly.
 
 If no skills are found, use the built-in ship guidance below.
 

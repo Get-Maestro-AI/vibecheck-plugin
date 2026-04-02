@@ -409,11 +409,11 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_resolve",
             description=(
-                "Resolve a context (issue, spec, etc.) in the VibeCheck dashboard. "
-                "Use this after fixing a blocking issue from /vibe:check, or after "
-                "completing a spec. Accepts either the UUID returned by vc-review or the "
-                "ISS-XX label shown on the dashboard. Type-aware: issues are archived, "
-                "specs are marked done."
+                "Resolve an issue or context in the VibeCheck dashboard. "
+                "Use this after fixing a blocking issue from /vibe:review, or after "
+                "completing a spec. Accepts a UUID or label (e.g. VC-ISS-4, SPEC-12). "
+                "Type-aware: issues (Items) are archived, specs/decisions/notes (Contexts) "
+                "are marked done."
             ),
             inputSchema={
                 "type": "object",
@@ -441,7 +441,7 @@ async def list_tools() -> list[types.Tool]:
                 "finished implementing a task and are ready for final review. "
                 "Returns the list of files to review. After reviewing, call "
                 "vibecheck_finalize_objective to close out. "
-                "Note: /vibe:check runs this full workflow automatically."
+                "Note: /vibe:review runs this full workflow automatically."
             ),
             inputSchema={
                 "type": "object",
@@ -513,11 +513,13 @@ async def list_tools() -> list[types.Tool]:
         types.Tool(
             name="vibecheck_get",
             description=(
-                "Get detail for a context. By default returns full content including brief, "
-                "status history, and linked sessions. Set summary_only=True for tier-2 "
-                "progressive reveal: returns title, type, status, and context_summary only "
-                "(no brief). Use summary_only after vibecheck_discover to evaluate a match "
-                "before loading full content."
+                "Get detail for a context or issue by ID or label. Accepts board-scoped labels "
+                "(e.g. VC-SPEC-12, VC-ISS-3), legacy global labels (e.g. SPEC-123, ISS-7), "
+                "and UUIDs — all resolve transparently. By default returns full content "
+                "including brief, status history, and linked sessions. Set summary_only=True "
+                "for tier-2 progressive reveal: returns title, type, status, and "
+                "context_summary only (no brief). Use summary_only after vibecheck_discover "
+                "to evaluate a match before loading full content."
             ),
             inputSchema={
                 "type": "object",
@@ -859,7 +861,7 @@ async def list_tools() -> list[types.Tool]:
             name="vibecheck_push_review",
             description=(
                 "Submit a structured code review to the VibeCheck dashboard. "
-                "Call this at the end of /vibe:check to persist findings, "
+                "Call this at the end of /vibe:review to persist findings, "
                 "create tracked issues, and get the ftx_just_completed signal for "
                 "the status summary. session_id and cwd are resolved automatically. "
                 "Returns: ok, blocking_issues count, issues[] with server-assigned IDs, "
@@ -930,23 +932,35 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             # Auto-link: resolving an issue records which session fixed it
             if session_id and session_id != "unknown":
                 try:
-                    # Resolve label → canonical UUID first (label lookup in GET endpoint)
-                    resolved_ctx = _api_call("GET", f"/api/contexts/{url_quote(ctx_id, safe='')}")
-                    canonical_id = resolved_ctx.get("id") if resolved_ctx and not resolved_ctx.get("error") else None
-                    if resolved_ctx and resolved_ctx.get("label"):
-                        resolved_label = resolved_ctx["label"]
-                        resolved_label = resolved_ctx["label"]
-                    if canonical_id:
-                        _api_call("POST", f"/api/contexts/{canonical_id}/link-session", {
-                            "session_id": session_id,
-                            "link_type": "issue_resolved",
-                        })
+                    # Issues are Items (item_type='issue') — try items endpoint first.
+                    # Fall back to contexts for specs/decisions/notes resolved via this tool.
+                    resolved_item = _api_call("GET", f"/api/items/{url_quote(ctx_id, safe='')}")
+                    if resolved_item and not resolved_item.get("error"):
+                        canonical_id = resolved_item.get("id")
+                        if resolved_item.get("label"):
+                            resolved_label = resolved_item["label"]
+                        if canonical_id:
+                            _api_call("POST", f"/api/items/{canonical_id}/link-session", {
+                                "session_id": session_id,
+                                "link_type": "issue_resolved",
+                            })
+                    else:
+                        # Context-type resolve (spec, decision, note)
+                        resolved_ctx = _api_call("GET", f"/api/contexts/{url_quote(ctx_id, safe='')}")
+                        canonical_id = resolved_ctx.get("id") if resolved_ctx and not resolved_ctx.get("error") else None
+                        if resolved_ctx and resolved_ctx.get("label"):
+                            resolved_label = resolved_ctx["label"]
+                        if canonical_id:
+                            _api_call("POST", f"/api/contexts/{canonical_id}/link-session", {
+                                "session_id": session_id,
+                                "link_type": "issue_resolved",
+                            })
                 except Exception:
                     pass
             url = f"{get_frontend_url()}/#context/{resolved_label}"
             text = f"Resolved {ctx_id} in VibeCheck{note_suffix}.\nView: {url}"
         else:
-            text = f"Could not resolve {ctx_id} — no matching active context found{note_suffix}."
+            text = f"Could not resolve {ctx_id} — no matching active context or issue found{note_suffix}."
         return [types.TextContent(type="text", text=text)]
 
 
@@ -1049,8 +1063,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         raw_id = arguments.get("id", "")
         summary_only = arguments.get("summary_only", False)
 
-        # Route Items (ISS-X labels) to the items API
-        is_item = raw_id.upper().startswith("ISS-")
+        # Route Items to the items API — matches ISS-X and board-scoped VC-ISS-X patterns
+        is_item = bool(re.match(r'^(?:[A-Z]+-)?ISS-\d+$', raw_id.upper()))
         if is_item:
             item_id = url_quote(raw_id, safe="")
             result = _api_call("GET", f"/api/items/{item_id}")
@@ -1313,6 +1327,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             "brief": brief_content,
             "created_by": "agent",
             "source_type": "agent",
+            "project_path": cwd,
         }
         if arguments.get("predecessor_id"):
             payload["predecessor_id"] = arguments["predecessor_id"]
@@ -1382,8 +1397,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
 
     if name == "vibecheck_patch":
         raw_id = arguments.get("id", "")
-        # Route Items (ISS-X labels) to the items API
-        if raw_id.upper().startswith("ISS-"):
+        # Route Items to the items API — matches ISS-X and board-scoped VC-ISS-X patterns
+        if re.match(r'^(?:[A-Z]+-)?ISS-\d+$', raw_id.upper()):
             item_id = url_quote(raw_id, safe="")
             patch: dict = {}
             if arguments.get("title"):
@@ -1712,7 +1727,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             type="text",
             text=(
                 "Done checkpoint blocked until completion protocol finishes. "
-                f"{result.get('next_action', result.get('reason', 'Non-negotiable: run /vibe:check before this session ends.'))}"
+                f"{result.get('next_action', result.get('reason', 'Non-negotiable: run /vibe:review before this session ends.'))}"
             ),
         )]
 

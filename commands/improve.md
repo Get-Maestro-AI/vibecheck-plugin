@@ -11,7 +11,7 @@ You will run the reflect phase. Discover and load reflect specialists:
 vibecheck_discover(query="reflect retrospective skill refinement session learnings", layer="skill", skill_type="reflect", limit=4)
 ```
 
-For each matched skill, call `vibecheck_get_context(id)` to load the full brief. The brief defines the methodology — follow it exactly.
+For each matched skill, call `vibecheck_get(id)` to load the full brief. The brief defines the methodology — follow it exactly.
 
 **Important:** This is a manual invocation. Tell each specialist to **skip the session dedup check** — explicit user intent always runs.
 
