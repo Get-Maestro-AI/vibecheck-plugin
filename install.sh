@@ -212,7 +212,7 @@ OUR_HOOKS = {
     "SessionStart": [
         {
             "identity": "[VibeCheck] Session started",
-            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Run /vibe:review after drafting specs/plans and before committing.'",
+            "command": "echo '[VibeCheck] Session started. Use vibecheck_update for progress checkpoints. Run /vibe:review before committing.'",
             "options": {},
         },
         {
@@ -244,7 +244,7 @@ OUR_HOOKS = {
         },
         {
             "identity": "[VibeCheck] Call vibecheck_update",
-            "command": "echo '[VibeCheck] Call vibecheck_update after each file edit or completed subtask. Run /vibe:review after drafting specs/plans and before committing.'",
+            "command": "echo '[VibeCheck] Call vibecheck_update after each file edit or completed subtask. Run /vibe:review before committing.'",
             "options": {},
         },
         {
@@ -268,7 +268,7 @@ OUR_HOOKS = {
         },
         {
             "identity": "[VibeCheck] Plan mode exited",
-            "command": "echo '[VibeCheck] Plan mode exited. If the plan was not saved to VibeCheck, save it now using vibecheck_create_context(type=plan) and POST to /api/push/vc-plan before proceeding.'",
+            "command": "echo '[VibeCheck] Plan mode exited. If the plan was not saved to VibeCheck, save it now using vibecheck_create(type=plan) and POST to /api/push/vc-plan before proceeding.'",
             "options": {},
             "matcher": "ExitPlanMode",
         },
@@ -384,13 +384,13 @@ for event_name, hooks in OUR_HOOKS.items():
 VIBECHECK_PERMISSIONS = [
     "mcp__vibecheck__vibecheck_update",
     "mcp__vibecheck__vibecheck_discover",
-    "mcp__vibecheck__vibecheck_get_context",
+    "mcp__vibecheck__vibecheck_get",
     "mcp__vibecheck__vibecheck_get_active_context_set",
-    "mcp__vibecheck__vibecheck_create_context",
-    "mcp__vibecheck__vibecheck_update_context",
+    "mcp__vibecheck__vibecheck_create",
+    "mcp__vibecheck__vibecheck_patch",
     "mcp__vibecheck__vibecheck_push_review",
     "mcp__vibecheck__vibecheck_find_related",
-    "mcp__vibecheck__vibecheck_list_contexts",
+    "mcp__vibecheck__vibecheck_list",
     "mcp__vibecheck__vibecheck_link_context",
     "mcp__vibecheck__vibecheck_resolve",
     "mcp__vibecheck__vibecheck_implement",
@@ -471,12 +471,10 @@ Reporting checkpoints are mandatory at each of these moments:
 - After each file edit or completed subtask: call vibecheck_update with what changed.
 - On every phase change (planning → implementing → debugging → reviewing): call vibecheck_update.
 - Before your final response in the conversation: call vibecheck_update with status "done".
-- After drafting a spec: run /vibe:review to check quality before continuing.
-- After drafting a plan: run /vibe:review to check quality before continuing.
 - After completing each implementation task: run /vibe:review to catch issues before committing.
 - After /vibe:review on a Build phase (i.e. a big chunk of implementation work): run /vibe:reflect to refine skills based on session friction.
 - After fixing any review-flagged issue: call vibecheck_resolve to mark it fixed on the dashboard.
-- When a spec or plan has been fully implemented: update its status to "done" via vibecheck_update_context.
+- When a spec or plan has been fully implemented: update its status to "done" via vibecheck_update.
 Minimum cadence: if 5 minutes of active work pass without a checkpoint, you are behind. Report now.
 The developer watches the dashboard externally. Silence = unknown state. Keep it live.
 </monitoring_protocol>
@@ -539,7 +537,7 @@ echo ""
 echo "  Core workflow:"
 echo "    /vibe:review         — review your work before committing"
 echo "    /vibe:fix <ID>      — investigate and fix a flagged issue"
-echo "    /vibe:implement     — begin a spec with full context loaded"
+echo "    /vibe:build <ID>    — begin a spec or run build methodology"
 echo "    /vibe:reflect       — refine skills based on session friction"
 echo "    /vibe:think         — develop a context interactively"
 echo ""
