@@ -957,7 +957,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                             })
                 except Exception:
                     pass
-            url = f"{get_frontend_url()}/#context/{resolved_label}"
+            url = f"{get_frontend_url()}/context/{resolved_label}"
             text = f"Resolved {ctx_id} in VibeCheck{note_suffix}.\nView: {url}"
         else:
             text = f"Could not resolve {ctx_id} — no matching active context or issue found{note_suffix}."
@@ -1111,7 +1111,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             f"**Type:** {result['type']} | **Status:** {result['status']} | **Layer:** {result.get('layer', '')}",
         ]
         if label:
-            lines.append(f"**Permalink:** {get_frontend_url()}/#context/{label}")
+            lines.append(f"**Permalink:** {get_frontend_url()}/context/{label}")
         if result.get("tags"):
             lines.append(f"**Tags:** {', '.join(result['tags'])}")
 
@@ -1381,7 +1381,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         title = result.get("title", "")
 
         if label:
-            url = f"{get_frontend_url()}/#context/{label}"
+            url = f"{get_frontend_url()}/context/{label}"
             if ctx_type == "decision":
                 text = (
                     f"Decision logged to Context Library: \"{title}\" ({label})\n"
@@ -1510,7 +1510,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
                 pass
 
         updated_label = result.get("label") or result.get("id") or ctx_id
-        url = f"{get_frontend_url()}/#context/{updated_label}"
+        url = f"{get_frontend_url()}/context/{updated_label}"
         return [types.TextContent(
             type="text",
             text=f"Context updated: \"{result['title']}\" ({updated_label}) — status={result['status']}\nView: {url}",
@@ -1647,7 +1647,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             f"**Type:** {ctx['type']} | **Status:** {ctx['status']} | **Layer:** {ctx['layer']}",
         ]
         if label:
-            lines.append(f"**Permalink:** {get_frontend_url()}/#context/{label}")
+            lines.append(f"**Permalink:** {get_frontend_url()}/context/{label}")
         lines += [
             "",
             f"## Spec Brief\n{ctx.get('brief') or '(no brief — use vibecheck_update to add one)'}",
@@ -1749,7 +1749,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         if logged and logged.get("label"):
             label = logged["label"]
             title = logged.get("title", "")
-            url = f"{get_frontend_url()}/#context/{label}"
+            url = f"{get_frontend_url()}/context/{label}"
             lines = [msg, f"\nLogged to Context Library: **{title}** ({label})"]
             lines.append(f"View: {url}")
             lines.append(f"*Tell the developer: \"I documented this decision as {label} in VibeCheck.\"*")
@@ -1762,7 +1762,7 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             notif_title = notif.get("title", "")
             notif_type = notif.get("ctx_type", "context")
             if notif_label and notif_title:
-                notif_url = f"{get_frontend_url()}/#context/{notif_label}"
+                notif_url = f"{get_frontend_url()}/context/{notif_label}"
                 lines = [
                     msg,
                     f"\nAuto-logged to Context Library: **{notif_title}** ({notif_label}) [{notif_type}]",
