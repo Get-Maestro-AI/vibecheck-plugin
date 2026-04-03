@@ -471,6 +471,7 @@ Reporting checkpoints are mandatory at each of these moments:
 - After each file edit or completed subtask: call vibecheck_update with what changed.
 - On every phase change (planning → implementing → debugging → reviewing): call vibecheck_update.
 - Before your final response in the conversation: call vibecheck_update with status "done".
+- Before ending any session: call vibecheck_resolve on every sprint board item worked on this session. Do not rely on the auto-classifier alone — explicit resolve is the primary path.
 - After completing each implementation task: run /vibe:review to catch issues before committing.
 - After /vibe:review on a Build phase (i.e. a big chunk of implementation work): run /vibe:reflect to refine skills based on session friction.
 - After fixing any review-flagged issue: call vibecheck_resolve to mark it fixed on the dashboard.
